@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Human Movement Arena</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Splash / Intro screen -->
+<div id="splash-screen">
+  <div class="splash-content">
+    <h1 class="splash-title">HUMAN MOVEMENT<br>ARENA</h1>
+    <div class="splash-sub">AI-POWERED FIGHTING GAME</div>
+    <div class="splash-modes">
+      <div class="splash-mode"><span class="splash-mode-name">1P VS AI</span> <span class="splash-mode-desc">Fight a trained AI opponent with 4 difficulty levels</span></div>
+      <div class="splash-mode"><span class="splash-mode-name">2P LOCAL</span> <span class="splash-mode-desc">Battle a friend on the same keyboard</span></div>
+      <div class="splash-mode"><span class="splash-mode-name">TRAIN MODE</span> <span class="splash-mode-desc">Watch AI vs AI learn to fight in real-time</span></div>
+    </div>
+    <div class="splash-controls">
+      <div class="splash-control"><span class="splash-key">WASD / Arrows</span> Move</div>
+      <div class="splash-control"><span class="splash-key">Q E F / I O P</span> Attack</div>
+      <div class="splash-control"><span class="splash-key">X / N</span> Block</div>
+      <div class="splash-control"><span class="splash-key">R / ,</span> Roll</div>
+    </div>
+    <button id="splash-start">START</button>
+  </div>
+</div>
+
+<div id="loading" style="display:none;">
+  <div class="spinner"></div>
+  Loading fighters...
+</div>
+
+<!-- Mode selection -->
+<div id="mode-select" style="display:none;">
+  <button class="back-btn" id="mode-back">BACK</button>
+  <h1>Human Movement Arena</h1>
+  <div class="subtitle">SELECT MODE</div>
+  <div class="mode-buttons">
+    <button class="mode-btn" data-mode="1p">1 PLAYER<br><span class="mode-sub">VS AI</span></button>
+    <button class="mode-btn" data-mode="2p">2 PLAYERS<br><span class="mode-sub">LOCAL</span></button>
+    <button class="mode-btn" data-mode="train">TRAIN<br><span class="mode-sub">AI VS AI</span></button>
+  </div>
+</div>
+
+<!-- Difficulty selection (1P only) -->
+<div id="difficulty-select" style="display:none;">
+  <button class="back-btn" id="diff-back">BACK</button>
+  <h1>Difficulty</h1>
+  <div class="subtitle">HOW TOUGH?</div>
+  <div class="diff-buttons"></div>
+</div>
+
+<!-- Class selection (shown after load, before fight) -->
+<div id="class-select" style="display:none;">
+  <button class="back-btn" id="class-back">BACK</button>
+  <h1>Choose Your Fighter</h1>
+  <div class="subtitle">- SELECT A CLASS -</div>
+  <div class="class-columns">
+    <div class="class-column col-p1">
+      <h3>Player 1 (WASD)</h3>
+    </div>
+    <div class="class-column col-p2">
+      <h3>Player 2 (Arrows)</h3>
+    </div>
+  </div>
+  <button id="fight-btn" disabled>FIGHT</button>
+</div>
+
+<!-- In-game UI (hidden until fight starts) -->
+<div id="ui" style="display:none;">
+  <button id="game-back" onclick="window._gameBack()">BACK</button>
+  <button id="arena-toggle" onclick="window._toggleArena()">ARENA</button>
+  <div id="info">
+    <h2>Human Movement Arena</h2>
+    <p>P1: WASD move, Shift sprint | P2: Arrows move, Shift sprint | Move to dodge ranged attacks!</p>
+  </div>
+
+  <div id="hud">
+    <span id="p1-label" class="player-label">P1</span>
+    <div id="p1-health" class="health-container" style="direction:rtl">
+      <div class="health-bar" style="width:100%"></div>
+      <span class="health-text">100</span>
+    </div>
+    <span class="vs-hud">VS</span>
+    <div id="p2-health" class="health-container">
+      <div class="health-bar" style="width:100%"></div>
+      <span class="health-text">100</span>
+    </div>
+    <span id="p2-label" class="player-label">P2</span>
+  </div>
+
+  <div id="proximity"></div>
+  <div id="hit-flash"></div>
+  <div id="dodge-toast"></div>
+
+  <div id="p1-combo" class="combo"></div>
+  <div id="p2-combo" class="combo"></div>
+
+  <div id="p1-toast" class="anim-toast"></div>
+  <div id="p2-toast" class="anim-toast"></div>
+
+  <div id="p1-panel" class="player-panel"></div>
+  <div id="p2-panel" class="player-panel"></div>
+
+  <!-- Training dashboard -->
+  <div id="training-dash" style="display:none;">
+    <div id="train-controls">
+      <span class="tc-label">SPEED:</span>
+      <button class="speed-btn" onclick="window._setSimSpeed(1)">1x</button>
+      <button class="speed-btn" onclick="window._setSimSpeed(2)">2x</button>
+      <button class="speed-btn" onclick="window._setSimSpeed(5)">5x</button>
+      <button class="speed-btn" onclick="window._setSimSpeed(10)">10x</button>
+      <button class="speed-btn" onclick="window._setSimSpeed(20)">20x</button>
+      <span id="speed-val" class="tc-speed">1x</span>
+    </div>
+    <div id="train-controls2">
+      <span class="tc-label">GHOSTS:</span>
+      <button class="speed-btn" onclick="window._setGhosts(0)">0</button>
+      <button class="speed-btn" onclick="window._setGhosts(10)">10</button>
+      <button class="speed-btn" onclick="window._setGhosts(50)">50</button>
+      <button class="speed-btn" onclick="window._setGhosts(100)">100</button>
+      <button class="speed-btn" onclick="window._setGhosts(200)">200</button>
+      <span id="ghost-val" class="tc-speed">0 ghosts</span>
+    </div>
+    <div id="train-controls3">
+      <span class="tc-label">TURBO:</span>
+      <button class="speed-btn" onclick="window._setTurbo(1)">OFF</button>
+      <button class="speed-btn" onclick="window._setTurbo(5)">5x</button>
+      <button class="speed-btn" onclick="window._setTurbo(10)">10x</button>
+      <button class="speed-btn" onclick="window._setTurbo(20)">20x</button>
+      <button class="speed-btn" onclick="window._setTurbo(50)">50x</button>
+      <span id="turbo-val" class="tc-speed">OFF</span>
+    </div>
+    <div id="train-controls4">
+      <span class="tc-label">HYPER:</span>
+      <button class="speed-btn" style="color:#ff4040;border-color:#803030" onclick="window._setHyper(true)">ON</button>
+      <button class="speed-btn" onclick="window._setHyper(false)">OFF</button>
+      <span id="hyper-val" class="tc-speed">OFF</span>
+      <span class="tc-label" style="font-size:5px;opacity:0.4">no render, max speed</span>
+    </div>
+    <div id="train-stats"></div>
+    <canvas id="train-graph" width="280" height="180"></canvas>
+    <div id="train-actions">
+      <button class="train-btn" onclick="window._exportTrainingData()">EXPORT DATA</button>
+      <button class="train-btn warn" onclick="if(confirm('Reset all learned data?')) window._resetTraining()">RESET ALL</button>
+    </div>
+    <div id="train-actions">
+      <button class="train-btn" onclick="window._resetBrain1()" style="color:#4090ff;border-color:#304080">RESET AI-1</button>
+      <button class="train-btn" onclick="window._resetBrain2()" style="color:#ff4040;border-color:#803030">RESET AI-2</button>
+    </div>
+    <div id="train-status">Auto-saving every 10 rounds to localStorage</div>
+  </div>
+
+  <div id="ko-overlay">
+    <div id="ko-text">K.O.</div>
+    <div id="ko-winner"></div>
+    <button id="ko-restart">REMATCH</button>
+    <button id="ko-download-log">SAVE MATCH LOG</button>
+  </div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
