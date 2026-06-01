@@ -30,9 +30,9 @@ export const orbitControls = new OrbitControls(camera, renderer.domElement);
 orbitControls.target.set(0, 1, 0);
 orbitControls.enableDamping = true;
 orbitControls.dampingFactor = 0.08;
-orbitControls.maxPolarAngle = Math.PI / 2 + 0.2;
+orbitControls.maxPolarAngle = Math.PI / 2;
 orbitControls.minDistance = 3;
-orbitControls.maxDistance = 25;
+orbitControls.maxDistance = 15;
 
 // Clock
 export const clock = new THREE.Clock();

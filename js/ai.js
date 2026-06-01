@@ -115,18 +115,16 @@ export class AIController {
       this.counterTimer = 0.2;
     }
 
-    // --- Decision ---
-    if (this.decisionTimer <= 0 && this.counterPhase === 0) {
+    // --- Decision (heuristic only for now — guaranteed to fight) ---
+    if (this.decisionTimer <= 0) {
       this.decisionTimer = this.decisionInterval;
+      this._heuristic(distance);
+    }
 
-      if (this.useBrain && this.brain) {
-        const state = this.brain.getState(distance, p, opp);
-        const actionIdx = this.brain.chooseAction(state);
-        this.brain.remember(state, actionIdx);
-        this._execute(actionIdx, distance);
-      } else {
-        this._heuristic(distance);
-      }
+    // Attack when in range and cooldown ready
+    if (distance < 2.5 && !p.isStunned &&
+        this.attackCooldown <= 0 && !ATTACKS[p.currentAnimName]) {
+      this._tryAttackAtDistance(distance);
     }
 
     // --- Apply movement (forward/backward only) ---
@@ -149,7 +147,7 @@ export class AIController {
       case 'rush_attack':
         this.moveForward = 1;
         this.isSprinting = true;
-        if (distance < 2.2) this._tryAttack();
+        if (distance < 2.5) this._tryAttack();
         break;
 
       case 'attack':
@@ -165,6 +163,7 @@ export class AIController {
       case 'advance':
         this.moveForward = 1;
         this.isSprinting = distance > 3;
+        if (distance < 2.5) this._tryAttack();
         break;
 
       case 'roll':
@@ -197,39 +196,31 @@ export class AIController {
     const atk = this.combatActions[Math.floor(Math.random() * this.combatActions.length)];
     p.play(atk.anim, 0.05);
     this._logAction(atk.anim);
-    this.attackCooldown = activeDifficulty.aiAttackCooldown + Math.random() * 0.1;
+    this.attackCooldown = 0.35 + Math.random() * 0.25;
   }
 
   _heuristic(distance) {
     const p = this.player;
-    const opp = this.opponent;
 
-    this.moveForward = 0;
-    this.isSprinting = false;
+    this.wantsBlock = false;
 
-    if (distance > 2.5) {
+    if (distance > 1.6) {
       this.moveForward = 1;
-      this.isSprinting = true;
-      return;
+      this.isSprinting = distance > 2.5;
+    } else {
+      this.moveForward = 0;
+      if (!p.isStunned) this._tryAttackAtDistance(distance);
     }
+  }
 
-    const oppAttacking = !!ATTACKS[opp.currentAnimName];
-    if (oppAttacking && !p.isStunned && this.attackCooldown <= 0) {
-      const r = Math.random();
-      if (r < 0.4) {
-        this.wantsBlock = true;
-        this.blockTimer = 0.2;
-        this.counterPhase = 1;
-        this.counterTimer = 0.2;
-        return;
-      } else if (r < 0.55) {
-        this.wantsBlock = true;
-        this.blockTimer = 0.3;
-        return;
-      }
-    }
+  _tryAttackAtDistance(distance) {
+    if (this.attackCooldown > 0 || this.player.isStunned) return;
+    if (ATTACKS[this.player.currentAnimName]) return;
+    if (this.combatActions.length === 0) return;
 
-    if (distance <= 2.5) this._tryAttack();
+    const atk = this.combatActions[Math.floor(Math.random() * this.combatActions.length)];
+    this.player.play(atk.anim, 0.05);
+    this.attackCooldown = 0.35 + Math.random() * 0.25;
   }
 
   _applyMovement(dt, dirToOpp, opp) {
@@ -250,7 +241,7 @@ export class AIController {
       p.move(moveDir.x, moveDir.z, speed, dt, opp);
 
       let anim;
-      if (this.isSprinting) anim = 'Sprint_Loop';
+      if (this.isSprinting) anim = 'Walk_Loop';
       else if (this.moveForward > 0) anim = 'Walk_Loop';
       else anim = 'Walk_Back_Loop';
 

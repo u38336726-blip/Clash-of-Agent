@@ -25,6 +25,7 @@
       <div class="splash-control"><span class="splash-key">R / ,</span> Roll</div>
     </div>
     <button id="splash-start">START</button>
+    <a href="test.html" style="display:block;margin-top:12px;color:#aaaaff;font-size:12px;letter-spacing:1px;text-decoration:none;opacity:0.7">🎬 ANIMATION TESTER →</a>
   </div>
 </div>
 
@@ -35,13 +36,13 @@
 
 <!-- Mode selection -->
 <div id="mode-select" style="display:none;">
-  <button class="back-btn" id="mode-back">BACK</button>
   <h1>Human Movement Arena</h1>
   <div class="subtitle">SELECT MODE</div>
   <div class="mode-buttons">
     <button class="mode-btn" data-mode="1p">1 PLAYER<br><span class="mode-sub">VS AI</span></button>
     <button class="mode-btn" data-mode="2p">2 PLAYERS<br><span class="mode-sub">LOCAL</span></button>
-    <button class="mode-btn" data-mode="train">TRAIN<br><span class="mode-sub">AI VS AI</span></button>
+    <button class="mode-btn" data-mode="train">AI VS AI<br><span class="mode-sub">TRAIN</span></button>
+    <button class="mode-btn" onclick="window.location.href='test.html'" style="border-color:#6644aa;color:#aa88ff">ANIMATION<br><span class="mode-sub" style="color:#8866cc">TESTER</span></button>
   </div>
 </div>
 
@@ -157,10 +158,21 @@
   <div id="ko-overlay">
     <div id="ko-text">K.O.</div>
     <div id="ko-winner"></div>
-    <button id="ko-restart">REMATCH</button>
-    <button id="ko-download-log">SAVE MATCH LOG</button>
+    <div style="display:flex;gap:12px;justify-content:center;margin-top:16px">
+      <button id="ko-restart">REMATCH</button>
+      <button id="ko-home" onclick="location.reload()">HOME</button>
+    </div>
   </div>
 </div>
+
+<!-- Animation Test Panel -->
+<div id="anim-test-panel" style="display:none;position:fixed;top:10px;right:10px;background:rgba(0,0,0,0.85);color:#fff;padding:12px;border-radius:8px;font-family:monospace;font-size:11px;z-index:999;max-height:90vh;overflow-y:auto;width:220px">
+  <div style="font-weight:bold;margin-bottom:8px;color:#ffcc00">ANIMATION TESTER</div>
+  <div style="margin-bottom:6px;color:#aaa">P1 (left) | P2 (right)</div>
+  <div id="anim-buttons"></div>
+  <button onclick="document.getElementById('anim-test-panel').style.display='none'" style="margin-top:8px;width:100%">CLOSE</button>
+</div>
+<button onclick="document.getElementById('anim-test-panel').style.display='block'" style="position:fixed;bottom:10px;left:10px;z-index:999;font-size:11px;padding:4px 8px">TEST ANIMS</button>
 
 <script type="importmap">
 {

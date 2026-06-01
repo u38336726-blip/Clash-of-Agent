@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animation Tester</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0a0a18; color: #fff; font-family: monospace; display: flex; height: 100vh; overflow: hidden; }
+
+  #viewport { flex: 1; position: relative; }
+  #viewport canvas { width: 100% !important; height: 100% !important; }
+
+  #anim-label {
+    position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+    font-size: 22px; font-weight: bold; color: #ffcc00;
+    text-shadow: 0 0 10px #ffcc0088; letter-spacing: 2px;
+    pointer-events: none;
+  }
+
+  #sidebar {
+    width: 300px; background: #0d0d20; border-left: 1px solid #222;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  #sidebar-header {
+    padding: 14px 16px; background: #111128; border-bottom: 1px solid #222;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  #sidebar-header h2 { font-size: 13px; color: #ffcc00; letter-spacing: 1px; }
+  #back-btn {
+    background: #1a1a2e; border: 1px solid #333; color: #aaa;
+    padding: 4px 10px; font-size: 11px; cursor: pointer; border-radius: 3px;
+  }
+  #back-btn:hover { background: #222240; color: #fff; }
+
+  #anim-scroll { flex: 1; overflow-y: auto; padding: 8px; }
+  #anim-scroll::-webkit-scrollbar { width: 4px; }
+  #anim-scroll::-webkit-scrollbar-thumb { background: #333; border-radius: 2px; }
+
+  .category { margin-bottom: 12px; }
+  .cat-label {
+    font-size: 9px; letter-spacing: 2px; color: #666; text-transform: uppercase;
+    padding: 4px 6px; margin-bottom: 4px;
+    border-bottom: 1px solid #1a1a2e;
+  }
+
+  .anim-btn {
+    display: block; width: 100%; text-align: left;
+    padding: 7px 10px; margin-bottom: 2px;
+    background: #111128; border: 1px solid #1a1a30;
+    color: #bbb; font-family: monospace; font-size: 11px;
+    cursor: pointer; border-radius: 3px; transition: all 0.1s;
+  }
+  .anim-btn:hover { background: #1a1a3a; color: #fff; border-color: #3a3a6a; }
+  .anim-btn.active { background: #1a3060; border-color: #4a80ff; color: #fff; }
+  .anim-btn .dmg { float: right; color: #ff6644; font-size: 10px; }
+  .anim-btn .glb { float: right; color: #448866; font-size: 9px; margin-right: 6px; }
+
+  #status {
+    padding: 8px 12px; background: #080812; border-top: 1px solid #1a1a2e;
+    font-size: 10px; color: #555; min-height: 32px;
+  }
+  #status span { color: #4488ff; }
+</style>
+</head>
+<body>
+
+<div id="viewport">
+  <div id="anim-label"></div>
+</div>
+
+<div id="sidebar">
+  <div id="sidebar-header">
+    <h2>ANIMATION TESTER</h2>
+    <button id="back-btn" onclick="window.location.href='index.html'">← BACK</button>
+  </div>
+  <div id="anim-scroll"></div>
+  <div id="status">Loading character...</div>
+</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.162.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ── Scene ──
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a18);
+scene.fog = new THREE.Fog(0x0a0a18, 20, 60);
+
+const vp = document.getElementById('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.3;
+vp.appendChild(renderer.domElement);
+
+const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 100);
+camera.position.set(0, 1.6, 4.5);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 1, 0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+// Lights
+const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+scene.add(ambient);
+const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+dirLight.position.set(3, 6, 4);
+dirLight.castShadow = true;
+scene.add(dirLight);
+const fillLight = new THREE.DirectionalLight(0x8899ff, 0.4);
+fillLight.position.set(-3, 2, -2);
+scene.add(fillLight);
+
+// Floor
+const floor = new THREE.Mesh(
+  new THREE.CircleGeometry(5, 48),
+  new THREE.MeshStandardMaterial({ color: 0x1a1a28, roughness: 0.9 })
+);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Grid
+const grid = new THREE.GridHelper(10, 20, 0x222233, 0x222233);
+scene.add(grid);
+
+// ── Resize ──
+function resize() {
+  const w = vp.clientWidth, h = vp.clientHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+new ResizeObserver(resize).observe(vp);
+resize();
+
+// ── Animation state ──
+let mixer = null;
+let currentAction = null;
+let currentBtn = null;
+const clock = new THREE.Clock();
+
+let returnToIdleTimer = null;
+
+function playAnim(name, glbName, btn) {
+  if (!mixer) return;
+
+  const clip = allClips[glbName];
+  if (!clip) { setStatus(`❌ Not found in GLB: ${glbName}`); return; }
+
+  // Cancel any pending return-to-idle
+  if (returnToIdleTimer) { clearTimeout(returnToIdleTimer); returnToIdleTimer = null; }
+
+  // Stop everything cleanly
+  mixer.stopAllAction();
+
+  const act = mixer.clipAction(clip);
+  const isLoop = ['Combat Idle','Combat Walk Fwd','Combat Walk Bwd',
+                  'Combat Walk Left','Combat Walk Right','Block'].includes(glbName);
+
+  act.setLoop(isLoop ? THREE.LoopRepeat : THREE.LoopOnce);
+  act.clampWhenFinished = true;
+  act.reset().play();
+  currentAction = act;
+
+  // Auto-return to idle after animation finishes
+  if (!isLoop) {
+    const ms = Math.max(800, clip.duration * 1000 + 400);
+    returnToIdleTimer = setTimeout(() => {
+      if (!mixer) return;
+      mixer.stopAllAction();
+      const idleClip = allClips['Combat Idle'];
+      if (idleClip) {
+        const idleAct = mixer.clipAction(idleClip);
+        idleAct.setLoop(THREE.LoopRepeat);
+        idleAct.reset().play();
+        currentAction = idleAct;
+      }
+      if (currentBtn) currentBtn.classList.remove('active');
+      document.getElementById('anim-label').textContent = 'Idle';
+      setStatus('✅ Ready — click any animation');
+    }, ms);
+  }
+
+  // UI update
+  if (currentBtn) currentBtn.classList.remove('active');
+  btn.classList.add('active');
+  currentBtn = btn;
+  document.getElementById('anim-label').textContent = name;
+  setStatus(`▶ <span>${name}</span> &nbsp;→&nbsp; ${glbName} &nbsp;(${clip.duration.toFixed(2)}s)`);
+}
+
+// ── All clips store ──
+const allClips = {};
+
+// ── Load GLB ──
+const loader = new GLTFLoader();
+loader.load('assets/character.glb', gltf => {
+  const model = gltf.scene;
+  model.position.set(0, 0, 0);
+  model.traverse(c => {
+    if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; }
+  });
+  scene.add(model);
+
+  mixer = new THREE.AnimationMixer(model);
+  gltf.animations.forEach(clip => { allClips[clip.name] = clip; });
+
+  // Play idle by default
+  const idle = allClips['Combat Idle'];
+  if (idle) {
+    const act = mixer.clipAction(idle);
+    act.play();
+    currentAction = act;
+  }
+
+  setStatus(`✅ Loaded ${gltf.animations.length} animations`);
+  buildPanel(gltf.animations);
+
+}, undefined, err => {
+  setStatus(`❌ Load error: ${err.message}`);
+});
+
+// ── Build sidebar panel ──
+const CATEGORIES = [
+  {
+    label: '⚡ Movement',
+    items: [
+      { name: 'Idle',        glb: 'Combat Idle' },
+      { name: 'Walk Fwd',    glb: 'Combat Walk Fwd' },
+      { name: 'Walk Back',   glb: 'Combat Walk Bwd' },
+      { name: 'Walk Left',   glb: 'Combat Walk Left' },
+      { name: 'Walk Right',  glb: 'Combat Walk Right' },
+    ]
+  },
+  {
+    label: '👊 Punches',
+    items: [
+      { name: 'Jab',           glb: 'Left Jab',          dmg: 8  },
+      { name: 'Hook (L)',      glb: 'Left Hook',          dmg: 14 },
+      { name: 'Hook (R)',      glb: 'Right Hook',         dmg: 14 },
+      { name: 'Cross',         glb: 'Right Cross',        dmg: 12 },
+      { name: 'Uppercut',      glb: 'Uppercut',           dmg: 16 },
+      { name: 'Uppercut Combo',glb: 'Uppercut Combo',     dmg: 20 },
+      { name: 'Body Punch (R)',glb: 'Right Body Punch',   dmg: 10 },
+      { name: 'Body Punch (L)',glb: 'Left Body Punch',    dmg: 10 },
+      { name: 'Elbow',         glb: 'Right Overhand',     dmg: 12 },
+      { name: 'Left Jab Combo',glb: 'Left Jab Counter',  dmg: 10 },
+    ]
+  },
+  {
+    label: '🦵 Kicks (for reference)',
+    items: [
+      { name: 'Flying Kick',   glb: 'Flying Kick',        dmg: 15 },
+      { name: 'Round Kick',    glb: 'Round Kick',         dmg: 18 },
+      { name: 'MMA Kick',      glb: 'Mma Kick Reverse',   dmg: 16 },
+      { name: 'Side Kick',     glb: 'Step Side Kick',     dmg: 14 },
+    ]
+  },
+  {
+    label: '🛡 Defense',
+    items: [
+      { name: 'Block',         glb: 'Block' },
+      { name: 'Dodge Back',    glb: 'Dodge Back' },
+      { name: 'Dodge Back Long',glb: 'Dodge Back Long' },
+      { name: 'Counter',       glb: 'Arm Twist Counter' },
+    ]
+  },
+  {
+    label: '💥 Reactions — Punch',
+    items: [
+      { name: 'Hit Chest (L)', glb: 'Left Hit' },
+      { name: 'Hit Head (R)',  glb: 'Right Hit' },
+      { name: 'Heavy Hit',     glb: 'Hard_Hit_Front' },
+    ]
+  },
+  {
+    label: '💥 Reactions — Kick',
+    items: [
+      { name: 'Kick Reaction',     glb: 'Shooting Hit Reaction' },
+      { name: 'Round Kick React',  glb: 'Round Kick Reaction' },
+      { name: 'MMA Kick React',    glb: 'Mma Kick Reverse Reaction' },
+      { name: 'Uppercut React',    glb: 'Uppercut Reaction' },
+      { name: 'Finisher React',    glb: 'Finisher Kick Reaction' },
+    ]
+  },
+  {
+    label: '☠ KO / Recovery',
+    items: [
+      { name: 'Knock Down Front', glb: 'Knock Down Front' },
+      { name: 'Knock Down Back',  glb: 'knock_down_back' },
+      { name: 'Lying Down',       glb: 'Lying Down' },
+      { name: 'Getting Up',       glb: 'Getting Up' },
+    ]
+  },
+  {
+    label: '🎭 Special / Extra',
+    items: [
+      { name: 'Finisher Kick',      glb: 'Finisher Kick' },
+      { name: 'Finisher Combo',     glb: 'Finisher Combo Kick' },
+      { name: 'Ground Attack',      glb: 'Ground Attack' },
+      { name: 'Sweep 1',            glb: 'SWEEP_1ST_CHAR' },
+      { name: 'Sweep 2',            glb: 'SWEEP_2ND_CHAR' },
+      { name: 'Swiping Left',       glb: 'Swiping - Left' },
+      { name: 'Swiping Right',      glb: 'Swiping - Right' },
+      { name: 'Stepped Punch L',    glb: 'stepped_LEFT_punch' },
+      { name: 'Stepped Punch R',    glb: 'stepped_right_punch' },
+      { name: 'Synced Attack',      glb: 'Synced Attack' },
+      { name: 'Arm Throw',          glb: 'Arm Throw Counter' },
+      { name: 'Leg Trip',           glb: 'Leg Trip Counter' },
+    ]
+  },
+];
+
+function buildPanel(animations) {
+  const scroll = document.getElementById('anim-scroll');
+  scroll.innerHTML = '';
+
+  CATEGORIES.forEach(cat => {
+    const section = document.createElement('div');
+    section.className = 'category';
+
+    const label = document.createElement('div');
+    label.className = 'cat-label';
+    label.textContent = cat.label;
+    section.appendChild(label);
+
+    cat.items.forEach(item => {
+      const exists = !!allClips[item.glb];
+      const btn = document.createElement('button');
+      btn.className = 'anim-btn';
+      btn.innerHTML = item.name
+        + (item.dmg ? `<span class="dmg">${item.dmg}dmg</span>` : '')
+        + `<span class="glb">${exists ? '✓' : '✗'}</span>`;
+      btn.style.opacity = exists ? '1' : '0.4';
+      btn.title = item.glb;
+      btn.onclick = () => { if (exists) playAnim(item.name, item.glb, btn); };
+      section.appendChild(btn);
+    });
+
+    scroll.appendChild(section);
+  });
+}
+
+function setStatus(msg) {
+  document.getElementById('status').innerHTML = msg;
+}
+
+// ── Render loop ──
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  if (mixer) mixer.update(dt);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>

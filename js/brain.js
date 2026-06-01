@@ -27,7 +27,7 @@ export const BRAIN_ACTIONS = [
 ];
 
 export class Brain {
-  constructor(id, learningRate = 0.4, discount = 0.92, epsilon = 0.5) {
+  constructor(id, learningRate = 0.4, discount = 0.92, epsilon = 0.15) {
     this.id = id;
     this.lr = learningRate;
     this.discount = discount;

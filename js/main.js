@@ -1,6 +1,51 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { scene, camera, renderer, orbitControls, clock, toggleArena, updateArenaTransition, isArenaReady } from './scene.js';
+import { scene, camera, renderer, orbitControls, clock, toggleArena, updateArenaTransition, isArenaReady, isArenaVisible } from './scene.js';
+
+// ── Wrist debug spheres (toggle with D key) ──
+let showBoneDebug = false;
+const wristSpheres = [];
+function initBoneDebug() {
+  const geo = new THREE.SphereGeometry(0.06, 8, 8);
+  const colors = [0xff4400, 0x0044ff, 0xff00ff, 0x00ffff];
+  for (let i = 0; i < 4; i++) {
+    const mesh = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color: colors[i] }));
+    mesh.visible = false;
+    scene.add(mesh);
+    wristSpheres.push(mesh);
+  }
+}
+function updateBoneDebug() {
+  if (!showBoneDebug || !player1 || !player2) {
+    wristSpheres.forEach(s => s.visible = false);
+    return;
+  }
+  const targets = [
+    { player: player1, sphere: wristSpheres[0], bone: 'rightHand' },
+    { player: player1, sphere: wristSpheres[1], bone: 'leftHand' },
+    { player: player2, sphere: wristSpheres[2], bone: 'rightHand' },
+    { player: player2, sphere: wristSpheres[3], bone: 'leftHand' },
+  ];
+  [[player1, 0, 1], [player2, 2, 3]].forEach(([p, ri, li]) => {
+    [['rightHand', ri], ['leftHand', li]].forEach(([boneName, si]) => {
+      const bone = p[boneName];
+      if (bone) {
+        const pos = new THREE.Vector3();
+        bone.getWorldPosition(pos);
+        wristSpheres[si].position.copy(pos);
+        wristSpheres[si].visible = true;
+      } else {
+        wristSpheres[si].visible = false;
+      }
+    });
+  });
+}
+document.addEventListener('keydown', e => {
+  if (e.key === 'd' || e.key === 'D') {
+    showBoneDebug = !showBoneDebug;
+    console.log('Bone debug:', showBoneDebug ? 'ON' : 'OFF');
+  }
+});
 import { Player } from './player.js';
 import { checkAttackHit } from './combat.js';
 import { CLASS_DEFS, getClassActions } from './classes.js';
@@ -13,44 +58,123 @@ import * as UI from './ui.js';
 
 let player1, player2;
 let shakeIntensity = 0;
-let gameMode = '2p';
-let ai1 = null, ai2 = null; // AI controllers
+let gameMode = 'train'; // AI vs AI direct
+let ai1 = null, ai2 = null;
 const logger = new MatchLogger();
 
 // Training state
 let simSpeed = 1;
-let autoRestart = false;
+let autoRestart = false; // show KO screen, don't auto-restart
 let roundCount = 0;
-let ghostRounds = 0; // headless fights completed
+let ghostRounds = 0;
 let gltfCache = { gltf1: null, gltf2: null };
-let p1ClassId, p2ClassId;
-let ghostsPerRound = 0; // disabled — 3D training only
+let p1ClassId = 'street';  // P1 class
+let p2ClassId = 'mma';     // P2 class
+let ghostsPerRound = 0;
 
 // ── Boot ──
 
 async function boot() {
-  // Show splash first
-  await UI.showSplash();
+  // Show mode select directly (skip splash)
+  document.getElementById('splash-screen').style.display = 'none';
+  document.getElementById('mode-select').style.display = 'flex';
 
+  // Load assets in background while user picks mode
   const loader = new GLTFLoader();
   const load = (url) => new Promise((res, rej) => loader.load(url, res, undefined, rej));
 
   let gltf1, gltf2;
-  try {
-    [gltf1, gltf2] = await Promise.all([load('assets/character.glb'), load('assets/character.glb')]);
-  } catch (e) {
-    document.getElementById('loading').textContent = 'Load error: ' + e.message;
+  const loadPromise = Promise.all([
+    load('assets/character.glb'),
+    load('assets/character.glb')
+  ]).then(([g1, g2]) => {
+    gltfCache = { gltf1: g1, gltf2: g2 };
+    UI.markAssetsLoaded();
+  }).catch(e => {
+    console.error('Load error:', e);
+  });
+
+  // Wait for mode selection
+  const mode = await new Promise(resolve => {
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+      btn.addEventListener('click', () => resolve(btn.dataset.mode), { once: true });
+    });
+  });
+
+  // If assets not loaded yet, show loading
+  if (!gltfCache.gltf1) {
+    document.getElementById('mode-select').style.display = 'none';
+    document.getElementById('loading').style.display = 'flex';
+    await loadPromise;
+    document.getElementById('loading').style.display = 'none';
+  } else {
+    document.getElementById('mode-select').style.display = 'none';
+  }
+
+  gameMode = mode;
+  autoRestart = (mode === 'train');
+
+  // For train mode: auto-pick classes and go straight to fight
+  if (mode === 'train') {
+    p1ClassId = 'street';
+    p2ClassId = 'mma';
+    setDifficulty('hard');
+    initBoneDebug();
+    initMatch();
+    animate();
     return;
   }
-  gltfCache = { gltf1, gltf2 };
 
-  UI.hideLoading();
-  UI.markAssetsLoaded();
-
+  // For 1p/2p: go through class select
   await menuLoop();
-
   initMatch();
   animate();
+}
+
+function setupAnimTester() {
+  const allAnims = [
+    // Movement
+    'Idle_Loop','Walk_Loop','Walk_Back_Loop',
+    // Punches
+    'Jab','Hook','Hook_Right','Cross','Uppercut','Uppercut_Combo','Body_Punch','Body_Punch_L','Elbow',
+    // Kicks
+    'Kick_Front','Kick_Round','Kick_MMA','Kick_Side',
+    // Power
+    'Tackle','Sweep','Counter','Finisher',
+    // Reactions — punch
+    'Hit_Chest','Hit_Head','Hit_Heavy',
+    // Reactions — kick specific
+    'Hit_Kick','Hit_KickR','Hit_KickM','Hit_Uppercut',
+    // KO / recovery
+    'Death01','Death02','GetUp','Lying_Down',
+    // Defense
+    'Block_Loop','Roll',
+  ];
+
+  const container = document.getElementById('anim-buttons');
+  allAnims.forEach(name => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;gap:4px;margin-bottom:3px;align-items:center';
+
+    const label = document.createElement('span');
+    label.textContent = name;
+    label.style.cssText = 'flex:1;font-size:10px;color:#ccc';
+
+    const btn1 = document.createElement('button');
+    btn1.textContent = 'P1';
+    btn1.style.cssText = 'font-size:9px;padding:1px 5px;background:#1a3a6a;color:#fff;border:1px solid #4a7aaa;cursor:pointer';
+    btn1.onclick = () => { if(player1) player1.play(name, 0.1); };
+
+    const btn2 = document.createElement('button');
+    btn2.textContent = 'P2';
+    btn2.style.cssText = 'font-size:9px;padding:1px 5px;background:#6a1a1a;color:#fff;border:1px solid #aa4a4a;cursor:pointer';
+    btn2.onclick = () => { if(player2) player2.play(name, 0.1); };
+
+    row.appendChild(label);
+    row.appendChild(btn1);
+    row.appendChild(btn2);
+    container.appendChild(row);
+  });
 }
 
 async function menuLoop() {
@@ -102,7 +226,7 @@ async function initMatch() {
   // Re-create players each round (reload model from cached gltf)
   // For first round, use gltfCache directly. For rematches, reload.
   // Start closer in training mode so fights happen immediately
-  const startDist = gameMode === 'train' ? 1.5 : 2.5;
+  const startDist = gameMode === 'train' ? 1.0 : 1.5;
 
   if (!player1) {
     player1 = new Player('p1', -startDist, p1Def, document.getElementById('p1-toast'));
@@ -110,29 +234,25 @@ async function initMatch() {
     player1.init(gltfCache.gltf1);
     player2.init(gltfCache.gltf2);
   } else {
+    // Full reset — restore position, health, animations, mixer speed
     player1.startX = -startDist;
     player2.startX = startDist;
+    if (player1.mixer) player1.mixer.timeScale = 1;
+    if (player2.mixer) player2.mixer.timeScale = 1;
     player1.reset();
     player2.reset();
   }
 
-  // Training mode: randomize starting HP so brain sees all HP states
-  // Some fights start full, some start low — covers the whole state space
-  if (gameMode === 'train') {
-    const hpRoll = Math.random();
-    let hpPct;
-    if (hpRoll < 0.3)      hpPct = 0.15 + Math.random() * 0.15;  // 15-30% — fast KO rounds
-    else if (hpRoll < 0.6)  hpPct = 0.4 + Math.random() * 0.2;   // 40-60% — mid fights
-    else                     hpPct = 0.8 + Math.random() * 0.2;   // 80-100% — full fights
-    player1.health = Math.round(player1.maxHealth * hpPct);
-    player2.health = Math.round(player2.maxHealth * hpPct);
-  }
+  // Always start with FULL health (no randomization in AI vs AI mode)
+  player1.health = player1.maxHealth;
+  player2.health = player2.maxHealth;
 
   const p1Actions = getClassActions(p1ClassId, 'p1');
   const p2Actions = getClassActions(p2ClassId, 'p2');
 
   UI.showGameUI();
-  // Arena stays hidden — click ARENA button to morph it in
+  // Auto-reveal arena on match start
+  if (isArenaReady() && !isArenaVisible()) toggleArena(3.0);
   UI.buildPanel('p1-panel', p1Actions, player1, 'active-p1');
   UI.buildPanel('p2-panel', p2Actions, player2, 'active-p2');
   UI.updateHealthBar(player1);
@@ -265,7 +385,18 @@ function handleKO(winner, loser) {
       if (hyperMode) runHyperLoop();
     }, hyperMode ? 0 : Math.max(50, 300 / simSpeed));
   } else {
-    UI.showKO(winner);
+    // Slow motion on KO moment
+    shakeIntensity = 0.15;
+    if (player1.mixer) player1.mixer.timeScale = 0.4;
+    if (player2.mixer) player2.mixer.timeScale = 0.4;
+
+    // Winner stays in idle, loser already plays Death anim from takeDamage
+    // Restore speed and show KO screen after animation plays
+    setTimeout(() => {
+      if (player1.mixer) player1.mixer.timeScale = 1;
+      if (player2.mixer) player2.mixer.timeScale = 1;
+      UI.showKO(winner);
+    }, 2500);
   }
 }
 
@@ -304,7 +435,7 @@ function resolveHit(attacker, victim) {
   UI.flashHit(victim.id);
   UI.showCombo(attacker);
   UI.updateHealthBar(victim);
-  shakeIntensity = Math.min(0.08, result.damage * 0.004);
+  shakeIntensity = Math.min(0.15, result.damage * 0.008);
   if (attackerAI) attackerAI.reward(result.damage * 0.5);  // reward proportional to damage
   if (victimAI)   victimAI.reward(-result.damage * 0.3);   // punish for taking hit
   logger.logEvent({ event: 'hit', attacker: attacker.id, action: attacker.currentAnimName, damage: result.damage, result: 'hit' }, state);
@@ -461,6 +592,7 @@ function gameTick(dt) {
   if (player1.model && player2.model) {
     player1.faceTarget(player2.model.position);
     player2.faceTarget(player1.model.position);
+    player1.pushApart(player2);
 
     if (!koHandled) {
       resolveHit(player1, player2);
@@ -530,11 +662,13 @@ function animate() {
   if (player1.model && player2.model) {
     UI.updateProximity(player1.model.position.distanceTo(player2.model.position));
   }
+  updateBoneDebug();
 
   if (shakeIntensity > 0.001) {
     camera.position.x += (Math.random() - 0.5) * shakeIntensity;
-    camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.5;
-    shakeIntensity *= 0.9;
+    camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.6;
+    camera.position.z += (Math.random() - 0.5) * shakeIntensity * 0.3;
+    shakeIntensity *= 0.85;
   }
 
   updateArenaTransition();

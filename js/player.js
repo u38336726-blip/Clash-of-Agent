@@ -5,6 +5,44 @@ import { BLOCK_ANIM } from './classes.js';
 import { activeDifficulty } from './difficulty.js';
 import { getFloorY } from './scene.js';
 
+// Maps logical animation names → actual GLB clip names (Fantacode Melee Combat System)
+const ANIM_MAP = {
+  'Idle_Loop':       'Combat Idle',
+  'Walk_Loop':       'Combat Walk Fwd',
+  'Walk_Back_Loop':  'Combat Walk Bwd',
+  'Sprint_Loop':     'Combat Walk Fwd',
+  'Jab':             'Left Jab',
+  'Hook':            'Left Hook',
+  'Hook_Right':      'Right Hook',
+  'Cross':           'Right Cross',
+  'Uppercut':        'Uppercut',
+  'Uppercut_Combo':  'Uppercut Combo',
+  'Body_Punch':      'Right Body Punch',
+  'Body_Punch_L':    'Left Body Punch',
+  'Kick_Front':      'Flying Kick',
+  'Kick_Round':      'Round Kick',
+  'Kick_MMA':        'Mma Kick Reverse',
+  'Kick_Side':       'Step Side Kick',
+  'Elbow':           'Right Overhand',
+  'Tackle':          'Leg Trip Counter',
+  'Sweep':           'SWEEP_1ST_CHAR',
+  'Block_Loop':      'Block',
+  'Roll':            'Dodge Back',
+  'Counter':         'Arm Twist Counter',
+  'Hit_Chest':       'Left Hit',
+  'Hit_Head':        'Right Hit',
+  'Hit_Heavy':       'Hard_Hit_Front',
+  'Hit_Kick':        'Shooting Hit Reaction',
+  'Hit_KickR':       'Round Kick Reaction',
+  'Hit_KickM':       'Mma Kick Reverse Reaction',
+  'Hit_Uppercut':    'Uppercut Reaction',
+  'Death01':         'Knock Down Front',
+  'Death02':         'knock_down_back',
+  'GetUp':           'Getting Up',
+  'Lying_Down':      'Lying Down',
+  'Finisher':        'Finisher Combo Kick',
+};
+
 export class Player {
   constructor(id, startX, classDef, toastEl) {
     this.id = id;
@@ -40,6 +78,13 @@ export class Player {
 
     // Block state
     this.isBlocking = false;
+    this.knockbackVel = new THREE.Vector3();
+
+    // Bone references for wrist-level hit detection
+    this.rightHand = null;
+    this.leftHand = null;
+    this.spine = null;
+    this.boneNames = []; // debug
   }
 
   init(gltf) {
@@ -69,20 +114,77 @@ export class Player {
       this.animations[clip.name] = this.mixer.clipAction(clip);
     });
 
+    // Find hand/spine bones — search ALL objects (GLB skeletons are Object3D not THREE.Bone)
+    const skip = ['index','middle','thumb','ring','pinky'];
+    this.model.traverse(obj => {
+      if (!obj.name) return;
+      const n = obj.name.toLowerCase();
+      this.boneNames.push(obj.name);
+      const hasSkip = skip.some(s => n.includes(s));
+      if (!hasSkip) {
+        if (n.includes('righthand') && !this.rightHand) this.rightHand = obj;
+        if (n.includes('lefthand')  && !this.leftHand)  this.leftHand  = obj;
+      }
+      // spine/chest for body hit target
+      if (!this.spine && (n.includes('spine1') || n.includes('chest') || n.includes('spine'))) {
+        this.spine = obj;
+      }
+    });
+
+    // Debug — print all found bone names
+    console.log(`[${this.id}] Bones found: RightHand=${this.rightHand?.name} LeftHand=${this.leftHand?.name} Spine=${this.spine?.name}`);
+    if (!this.rightHand) {
+      console.warn(`[${this.id}] Hand bones not found. All names:`, this.boneNames.filter(n => n.length > 2).join(', '));
+    }
+
     this.play('Idle_Loop', 0.3);
   }
 
-  play(name, fadeDuration = 0.35) {
-    if (this.gameOver && name !== 'Death01' && name !== 'Idle_Loop') return;
-    if (this.isStunned && !['Hit_Chest', 'Hit_Head', 'Death01', 'Block_Loop'].includes(name)) return;
+  // Returns world position of the attacking wrist bone based on current attack
+  getAttackHandPos() {
+    if (!this.model) return null;
+    const anim = this.currentAnimName;
 
-    const action = this.animations[name];
+    // Map attacks to which hand they use
+    const leftHandAtks  = new Set(['Jab','Hook','Body_Punch_L','Uppercut_Combo']);
+    const rightHandAtks = new Set(['Cross','Hook_Right','Uppercut','Body_Punch','Elbow','Counter']);
+
+    let bone = null;
+    if (leftHandAtks.has(anim) && this.leftHand)   bone = this.leftHand;
+    else if (rightHandAtks.has(anim) && this.rightHand) bone = this.rightHand;
+    else if (this.rightHand) bone = this.rightHand; // fallback
+
+    if (!bone) return null;
+    const pos = new THREE.Vector3();
+    bone.getWorldPosition(pos);
+    return pos;
+  }
+
+  // Returns world position of the body center (chest area) for receiving hits
+  getBodyPos() {
+    if (!this.model) return null;
+    const pos = this.model.position.clone();
+    pos.y += 1.1; // chest height
+    if (this.spine) {
+      this.spine.getWorldPosition(pos);
+    }
+    return pos;
+  }
+
+  play(name, fadeDuration = 0.35) {
+    if (this.gameOver && !['Death01', 'Death02', 'Lying_Down', 'Idle_Loop'].includes(name)) return;
+    const reactionAnims = ['Hit_Chest','Hit_Head','Hit_Heavy','Death01','Death02','Block_Loop'];
+    if (this.isStunned && !reactionAnims.includes(name)) return;
+
+    const resolvedName = ANIM_MAP[name] ?? name;
+    const action = this.animations[resolvedName];
     if (!action) return;
     const isOneShot = ONE_SHOT.includes(name);
     if (this.currentAction === action && !isOneShot) return;
 
     if (this.currentAction) this.currentAction.fadeOut(fadeDuration);
     action.reset().fadeIn(fadeDuration).play();
+    this.currentResolvedName = resolvedName;
 
     if (isOneShot) {
       action.setLoop(THREE.LoopOnce);
@@ -125,7 +227,9 @@ export class Player {
       let diff = angle - this.model.rotation.y;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
-      this.model.rotation.y += diff * 0.1;
+      // Clamp max rotation per frame to prevent spinning
+      const maxRot = 0.12;
+      this.model.rotation.y += Math.max(-maxRot, Math.min(maxRot, diff * 0.15));
     }
   }
 
@@ -135,9 +239,9 @@ export class Player {
     const moveVec = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(speed * dt);
     const newPos = this.model.position.clone().add(moveVec);
 
-    // Collision with other player
+    // Collision with other player — keep at arm's reach so fists touch surface not inside
     if (otherPlayer?.model) {
-      if (newPos.distanceTo(otherPlayer.model.position) < 0.8) return;
+      if (newPos.distanceTo(otherPlayer.model.position) < 1.4) return;
     }
 
     this.model.position.copy(newPos);
@@ -168,16 +272,38 @@ export class Player {
       this.isStunned = false;
       this.isBlocking = false;
       this.stunTimer = 0;
-      this.deathDelay = 0.3; // game-time seconds before death anim
+      this.deathDelay = 0;
+      // Play KO animation immediately — random front or back knockdown
+      if (this.currentAction) { this.currentAction.stop(); this.currentAction = null; }
+      this.currentAnimName = 'Idle_Loop';
+      const koAnim = Math.random() > 0.5 ? 'Death01' : 'Death02';
+      this.play(koAnim, 0.05);
       return;
     }
 
-    // If blocking, stay in block — no stun, no reaction anim
     if (wasBlocked && this.isBlocking) return;
 
+    // Play reaction FIRST before any freeze so it's queued correctly
+    // Force stop current animation then play reaction
+    if (this.currentAction) {
+      this.currentAction.stop();
+      this.currentAction = null;
+    }
     this.isStunned = true;
-    this.stunTimer = activeDifficulty.stunDuration;
-    this.play(reactionAnim, 0.15);
+    this.stunTimer = Math.min(1.2, 0.5 + amount * 0.02);
+    this.currentAnimName = 'Idle_Loop'; // reset so stun guard allows reaction
+    this.play(reactionAnim, 0.0); // zero fade = instant reaction
+
+    // Knockback — small push, keep characters close
+    if (this.model) {
+      const knockForce = Math.min(0.4, 0.1 + amount * 0.01);
+      const knockDir = this.model.position.clone().normalize();
+      if (knockDir.length() < 0.1) knockDir.set(1, 0, 0);
+      this.knockbackVel = knockDir.multiplyScalar(knockForce);
+    }
+
+    // Small camera shake instead of mixer freeze (freeze interferes with reaction)
+    // Shake is handled by main.js via shakeIntensity
   }
 
   reset() {
@@ -190,16 +316,56 @@ export class Player {
     this.isBlocking = false;
     this.stunTimer = 0;
     this.deathDelay = 0;
+    this.currentAnimName = 'Idle_Loop';
     this.velocity.set(0, 0, 0);
+    this.knockbackVel.set(0, 0, 0);
     clearTimeout(this.comboTimeout);
-    if (this.model) this.model.position.set(this.startX, getFloorY(), 0);
-    this.play('Idle_Loop', 0.3);
+
+    // Stop all animations cleanly and restore mixer
+    if (this.mixer) {
+      this.mixer.stopAllAction();
+      this.mixer.timeScale = 1;
+    }
+    this.currentAction = null;
+
+    if (this.model) {
+      this.model.position.set(this.startX, getFloorY(), 0);
+      // Reset rotation to face center
+      this.model.rotation.y = this.startX < 0 ? Math.PI / 2 : -Math.PI / 2;
+    }
+
+    this.play('Idle_Loop', 0.1);
+  }
+
+  pushApart(other, minDist = 1.4) {
+    if (!this.model || !other.model) return;
+    const diff = new THREE.Vector3().subVectors(this.model.position, other.model.position);
+    diff.y = 0;
+    const dist = diff.length();
+    if (dist < minDist && dist > 0.01) {
+      const push = diff.normalize().multiplyScalar((minDist - dist) * 0.5);
+      this.model.position.add(push);
+      other.model.position.sub(push);
+    }
   }
 
   update(dt) {
     if (this.mixer) this.mixer.update(dt);
-    // Keep on correct floor level
-    if (this.model) this.model.position.y = getFloorY();
+    if (this.model) {
+      // Apply knockback velocity with friction
+      if (this.knockbackVel && this.knockbackVel.length() > 0.01) {
+        this.model.position.addScaledVector(this.knockbackVel, dt * 20);
+        this.knockbackVel.multiplyScalar(0.7); // friction
+        // Clamp to arena
+        const d = Math.sqrt(this.model.position.x ** 2 + this.model.position.z ** 2);
+        if (d > arenaRadius) {
+          this.model.position.x *= arenaRadius / d;
+          this.model.position.z *= arenaRadius / d;
+          this.knockbackVel.set(0, 0, 0);
+        }
+      }
+      this.model.position.y = getFloorY();
+    }
 
     // Attack elapsed in game-time
     if (ATTACKS[this.currentAnimName] && !this.attackHitChecked) {
@@ -214,13 +380,5 @@ export class Player {
       }
     }
 
-    // Death delay in game-time
-    if (this.deathDelay > 0) {
-      this.deathDelay -= dt;
-      if (this.deathDelay <= 0) {
-        this.deathDelay = 0;
-        this.play('Death01', 0.3);
-      }
-    }
   }
 }

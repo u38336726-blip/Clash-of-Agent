@@ -6,20 +6,26 @@ export const CLASS_DEFS = {
     description: 'Lightning-fast punches. High combo potential.',
     color: '#ff4422',
     attacks: [
-      { anim: 'Jab',  label: 'Jab'   },
-      { anim: 'Hook', label: 'Hook'  },
-      { anim: 'Elbow', label: 'Elbow' },
+      { anim: 'Jab',            label: 'Jab'       },
+      { anim: 'Hook',           label: 'Hook'      },
+      { anim: 'Cross',          label: 'Cross'     },
+      { anim: 'Uppercut',       label: 'Uppercut'  },
+      { anim: 'Body_Punch',     label: 'Body Shot' },
+      { anim: 'Uppercut_Combo', label: 'Combo'     },
     ],
     stats: { maxHealth: 110, walkSpeed: 2.6, sprintSpeed: 4.2 },
   },
   mma: {
     name: 'MMA',
-    description: 'Kicks and takedowns. Versatile range.',
+    description: 'Close combat specialist.',
     color: '#22aaff',
     attacks: [
-      { anim: 'Kick_Front', label: 'Front Kick'  },
-      { anim: 'Tackle',     label: 'Takedown'    },
-      { anim: 'Jab',        label: 'Jab'         },
+      { anim: 'Jab',            label: 'Jab'       },
+      { anim: 'Cross',          label: 'Cross'     },
+      { anim: 'Hook',           label: 'Hook'      },
+      { anim: 'Elbow',          label: 'Elbow'     },
+      { anim: 'Uppercut',       label: 'Uppercut'  },
+      { anim: 'Body_Punch',     label: 'Body Shot' },
     ],
     stats: { maxHealth: 100, walkSpeed: 2.4, sprintSpeed: 4.0 },
   },
@@ -28,9 +34,12 @@ export const CLASS_DEFS = {
     description: 'Raw power. Hard-hitting brawler style.',
     color: '#ffaa00',
     attacks: [
-      { anim: 'Hook',       label: 'Haymaker'    },
-      { anim: 'Kick_Round', label: 'Roundhouse'  },
-      { anim: 'Jab',        label: 'Jab'         },
+      { anim: 'Hook',           label: 'Haymaker'  },
+      { anim: 'Hook_Right',     label: 'Right Hook'},
+      { anim: 'Uppercut_Combo', label: 'Combo'     },
+      { anim: 'Body_Punch_L',   label: 'Body Shot' },
+      { anim: 'Elbow',          label: 'Elbow'     },
+      { anim: 'Cross',          label: 'Cross'     },
     ],
     stats: { maxHealth: 120, walkSpeed: 2.3, sprintSpeed: 3.8 },
   },
@@ -39,33 +48,32 @@ export const CLASS_DEFS = {
     description: 'Tactical close-quarters. Fast and lethal.',
     color: '#88ff44',
     attacks: [
-      { anim: 'Tackle',     label: 'Takedown'    },
-      { anim: 'Elbow',      label: 'Elbow Strike' },
-      { anim: 'Hook',       label: 'Hook'        },
+      { anim: 'Elbow',          label: 'Elbow'     },
+      { anim: 'Cross',          label: 'Cross'     },
+      { anim: 'Jab',            label: 'Jab'       },
+      { anim: 'Counter',        label: 'Counter'   },
+      { anim: 'Hook',           label: 'Hook'      },
+      { anim: 'Body_Punch',     label: 'Body Shot' },
     ],
     stats: { maxHealth: 90, walkSpeed: 3.0, sprintSpeed: 4.8 },
   },
 };
 
-// P1 combat keys: Q, E, F   |   P2 combat keys: I, O, P
-const P1_COMBAT_KEYS = ['Q', 'E', 'F'];
-const P2_COMBAT_KEYS = ['I', 'O', 'P'];
+// P1 combat keys   |   P2 combat keys
+const P1_COMBAT_KEYS = ['Q', 'E', 'F', 'Z', 'T', 'G', 'Y', 'H'];
+const P2_COMBAT_KEYS = ['I', 'O', 'P', 'K', 'L', 'J', 'U', 'M'];
 
 // Block anim name — used by player.js and combat.js
 export const BLOCK_ANIM = 'Block_Loop';
 
 const P1_SHARED = [
-  { key: 'Space', anim: 'Jump_Start',       label: 'Jump',   category: 'move' },
-  { key: 'X',     anim: BLOCK_ANIM,         label: 'Block',  category: 'move' },
-  { key: 'C',     anim: 'Crouch_Idle_Loop', label: 'Crouch', category: 'move' },
-  { key: 'R',     anim: 'Roll',             label: 'Roll',   category: 'move' },
+  { key: 'X', anim: BLOCK_ANIM, label: 'Block', category: 'move' },
+  { key: 'R', anim: 'Roll',     label: 'Dodge', category: 'move' },
 ];
 
 const P2_SHARED = [
-  { key: '/',     anim: 'Jump_Start',       label: 'Jump',   category: 'move' },
-  { key: 'N',     anim: BLOCK_ANIM,         label: 'Block',  category: 'move' },
-  { key: '.',     anim: 'Crouch_Idle_Loop', label: 'Crouch', category: 'move' },
-  { key: ',',     anim: 'Roll',             label: 'Roll',   category: 'move' },
+  { key: 'N', anim: BLOCK_ANIM, label: 'Block', category: 'move' },
+  { key: ',', anim: 'Roll',     label: 'Dodge', category: 'move' },
 ];
 
 /**
