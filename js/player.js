@@ -48,6 +48,52 @@ const PLAYER_COLLISION_DIST = 1.56;
 const PLAYER_ATTACK_SEPARATION_DIST = 1.56;
 const PLAYER_BODY_COLLISION_DIST = 0.84;
 const PLAYER_ATTACK_BODY_SEPARATION_DIST = 0.78;
+const ROOT_MOTION_TRACK_SUFFIXES = ['.position', '.translation'];
+const ROOT_MOTION_RULES = [
+  { pattern: 'soldier_team3_unlit', axes: 'xyz' },
+  { pattern: 'armature', axes: 'xyz' },
+  { pattern: 'mixamorig_hips', axes: 'xz' },
+];
+
+function trackNameMatches(trackName, pattern) {
+  const lower = trackName.toLowerCase();
+  return lower === pattern || lower.startsWith(`${pattern}.`) || lower.includes(`${pattern}.`);
+}
+
+function sanitizeRootMotionTrack(track, axes) {
+  const clonedTrack = track.clone();
+  const values = clonedTrack.values?.slice?.();
+  if (!values || values.length < 3) return track;
+
+  const x0 = values[0];
+  const y0 = values[1];
+  const z0 = values[2];
+  for (let i = 0; i < values.length; i += 3) {
+    if (axes.includes('x')) values[i] = x0;
+    if (axes.includes('y')) values[i + 1] = y0;
+    if (axes.includes('z')) values[i + 2] = z0;
+  }
+  clonedTrack.values = values;
+  return clonedTrack;
+}
+
+function sanitizeAnimationClip(clip) {
+  const clonedClip = clip.clone();
+  clonedClip.tracks = clonedClip.tracks.map(track => {
+    const lowerName = track.name.toLowerCase();
+    const isRootMotionTrack = ROOT_MOTION_TRACK_SUFFIXES.some(suffix => lowerName.endsWith(suffix));
+    if (!isRootMotionTrack) return track;
+
+    for (const rule of ROOT_MOTION_RULES) {
+      if (trackNameMatches(lowerName, rule.pattern)) {
+        return sanitizeRootMotionTrack(track, rule.axes);
+      }
+    }
+
+    return track;
+  });
+  return clonedClip;
+}
 
 export class Player {
   constructor(id, startX, classDef, toastEl) {
@@ -95,6 +141,7 @@ export class Player {
     this.boneNames = []; // debug
     this._oneShotDone = null; // tracks active finished-event listener
     this.idlePhaseOffset = Math.random() * Math.PI * 2; // per-fighter breathing phase
+    this.rootMotionLocks = [];
   }
 
   init(gltf) {
@@ -135,7 +182,11 @@ export class Player {
     this.mixer = new THREE.AnimationMixer(this.model);
 
     gltf.animations.forEach(clip => {
-      this.animations[clip.name] = this.mixer.clipAction(clip);
+      const sanitizedClip = sanitizeAnimationClip(clip);
+      const action = this.mixer.clipAction(sanitizedClip);
+      action.zeroSlopeAtStart = true;
+      action.zeroSlopeAtEnd = true;
+      this.animations[clip.name] = action;
     });
 
     // Find hand/foot/spine bones — search ALL objects (GLB skeletons are Object3D not THREE.Bone)
@@ -168,6 +219,12 @@ export class Player {
       // spine/chest for body hit target
       if (!this.spine && (n.includes('spine1') || n.includes('chest') || n.includes('spine'))) {
         this.spine = obj;
+      }
+
+      if (n === 'armature' || n === 'soldier_team3_unlit') {
+        this.rootMotionLocks.push({ obj, base: obj.position.clone(), axes: 'xyz' });
+      } else if (n === 'mixamorig_hips') {
+        this.rootMotionLocks.push({ obj, base: obj.position.clone(), axes: 'xz' });
       }
     });
 
@@ -244,6 +301,22 @@ export class Player {
     return pos;
   }
 
+  clearOneShotListener() {
+    if (this._oneShotDone && this.mixer) {
+      this.mixer.removeEventListener('finished', this._oneShotDone);
+      this._oneShotDone = null;
+    }
+  }
+
+  applyRootMotionLocks() {
+    for (const lock of this.rootMotionLocks) {
+      if (!lock.obj) continue;
+      if (lock.axes.includes('x')) lock.obj.position.x = lock.base.x;
+      if (lock.axes.includes('y')) lock.obj.position.y = lock.base.y;
+      if (lock.axes.includes('z')) lock.obj.position.z = lock.base.z;
+    }
+  }
+
   play(name, fadeDuration = 0.35) {
     if (this.gameOver && !['Death01', 'Death02', 'Lying_Down', 'Idle_Loop'].includes(name)) return;
     const reactionAnims = [
@@ -258,8 +331,23 @@ export class Player {
     const isOneShot = ONE_SHOT.includes(name);
     if (this.currentAction === action && !isOneShot) return;
 
-    if (this.currentAction) this.currentAction.fadeOut(fadeDuration);
-    action.reset().fadeIn(fadeDuration).play();
+    this.clearOneShotListener();
+    const previousAction = this.currentAction && this.currentAction !== action ? this.currentAction : null;
+
+    action.enabled = true;
+    action.setEffectiveWeight(1);
+    action.setEffectiveTimeScale(1);
+    action.reset();
+    action.play();
+
+    if (previousAction && fadeDuration > 0) {
+      previousAction.enabled = true;
+      action.crossFadeFrom(previousAction, fadeDuration, false);
+    } else if (previousAction) {
+      previousAction.stop();
+    } else if (!previousAction && fadeDuration > 0) {
+      action.fadeIn(fadeDuration);
+    }
     this.currentResolvedName = resolvedName;
 
     // Per-animation speed — makes punches snappy and sprint visually distinct
@@ -276,11 +364,6 @@ export class Player {
     if (isOneShot) {
       action.setLoop(THREE.LoopOnce);
       action.clampWhenFinished = true;
-      // Remove any previous listener to prevent stale idle transitions
-      if (this._oneShotDone) {
-        this.mixer.removeEventListener('finished', this._oneShotDone);
-        this._oneShotDone = null;
-      }
       const capturedName = name;
       const onDone = (e) => {
         if (e.action !== action) return; // only react to this specific action
@@ -381,6 +464,7 @@ export class Player {
       this.stunTimer = 0;
       this.deathDelay = 0;
       // Play KO animation immediately — random front or back knockdown
+      this.clearOneShotListener();
       if (this.currentAction) { this.currentAction.stop(); this.currentAction = null; }
       this.currentAnimName = 'Idle_Loop';
       const koAnim = Math.random() > 0.5 ? 'Death01' : 'Death02';
@@ -402,6 +486,7 @@ export class Player {
 
     // Play reaction FIRST before any freeze so it's queued correctly
     // Force stop current animation then play reaction
+    this.clearOneShotListener();
     if (this.currentAction) {
       this.currentAction.stop();
       this.currentAction = null;
@@ -446,6 +531,7 @@ export class Player {
     this.velocity.set(0, 0, 0);
     this.knockbackVel.set(0, 0, 0);
     clearTimeout(this.comboTimeout);
+    this.clearOneShotListener();
 
     // Stop all animations cleanly and restore mixer
     if (this.mixer) {
@@ -530,6 +616,7 @@ export class Player {
 
   update(dt) {
     if (this.mixer) this.mixer.update(dt);
+    this.applyRootMotionLocks();
     if (this.model) {
       // Apply knockback velocity with friction
       if (this.knockbackVel && this.knockbackVel.length() > 0.01) {
