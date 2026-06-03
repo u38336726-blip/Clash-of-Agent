@@ -1,5 +1,7 @@
 // Fighter class definitions — pure hand-to-hand combat (Taken 3 style).
 
+const STANDARD_MAX_HEALTH = 100;
+
 export const CLASS_DEFS = {
   boxer: {
     name: 'Boxer',
@@ -13,7 +15,7 @@ export const CLASS_DEFS = {
       { anim: 'Body_Punch',     label: 'Body Shot' },
       { anim: 'Uppercut_Combo', label: 'Combo'     },
     ],
-    stats: { maxHealth: 110, walkSpeed: 2.6, sprintSpeed: 4.2 },
+    stats: { maxHealth: STANDARD_MAX_HEALTH, walkSpeed: 2.6, sprintSpeed: 4.2 },
   },
   mma: {
     name: 'MMA',
@@ -27,7 +29,7 @@ export const CLASS_DEFS = {
       { anim: 'Uppercut',       label: 'Uppercut'  },
       { anim: 'Body_Punch',     label: 'Body Shot' },
     ],
-    stats: { maxHealth: 100, walkSpeed: 2.4, sprintSpeed: 4.0 },
+    stats: { maxHealth: STANDARD_MAX_HEALTH, walkSpeed: 2.4, sprintSpeed: 4.0 },
   },
   street: {
     name: 'Street',
@@ -41,7 +43,7 @@ export const CLASS_DEFS = {
       { anim: 'Elbow',          label: 'Elbow'     },
       { anim: 'Cross',          label: 'Cross'     },
     ],
-    stats: { maxHealth: 120, walkSpeed: 2.3, sprintSpeed: 3.8 },
+    stats: { maxHealth: STANDARD_MAX_HEALTH, walkSpeed: 2.3, sprintSpeed: 3.8 },
   },
   agent: {
     name: 'Agent',
@@ -55,7 +57,7 @@ export const CLASS_DEFS = {
       { anim: 'Hook',           label: 'Hook'      },
       { anim: 'Body_Punch',     label: 'Body Shot' },
     ],
-    stats: { maxHealth: 90, walkSpeed: 3.0, sprintSpeed: 4.8 },
+    stats: { maxHealth: STANDARD_MAX_HEALTH, walkSpeed: 3.0, sprintSpeed: 4.8 },
   },
 };
 

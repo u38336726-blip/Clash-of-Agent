@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { scene, camera, renderer, orbitControls, clock, toggleArena, updateArenaTransition, isArenaReady, isArenaVisible } from './scene.js';
+import { scene, camera, renderer, orbitControls, clock, toggleArena, updateArenaTransition, isArenaReady, isArenaVisible, updateCameraForFight } from './scene.js';
 
 // ── Wrist debug spheres (toggle with D key) ──
 let showBoneDebug = false;
@@ -46,6 +46,43 @@ document.addEventListener('keydown', e => {
     console.log('Bone debug:', showBoneDebug ? 'ON' : 'OFF');
   }
 });
+
+// ── 3D Hit flash effects ──
+const hitFlashes = [];
+(function initHitFlashes() {
+  for (let i = 0; i < 8; i++) {
+    const geo = new THREE.RingGeometry(0.06, 0.3, 14);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xffee88, transparent: true, opacity: 0,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.visible = false;
+    scene.add(mesh);
+    hitFlashes.push({ mesh, life: 0, maxLife: 0.2 });
+  }
+})();
+
+function spawnHitFlash(pos) {
+  const f = hitFlashes.find(f => f.life <= 0);
+  if (!f || !pos) return;
+  f.mesh.position.set(pos.x, Math.max(0.4, pos.y), pos.z);
+  f.mesh.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI * 2);
+  f.mesh.scale.setScalar(1.0);
+  f.mesh.material.opacity = 1.0;
+  f.mesh.visible = true;
+  f.life = f.maxLife;
+}
+
+function updateHitFlashes(dt) {
+  hitFlashes.forEach(f => {
+    if (f.life <= 0) { f.mesh.visible = false; return; }
+    f.life -= dt;
+    const t = f.life / f.maxLife;
+    f.mesh.material.opacity = t * 0.9;
+    f.mesh.scale.setScalar(1.0 + (1 - t) * 2.2);
+  });
+}
 import { Player } from './player.js';
 import { checkAttackHit } from './combat.js';
 import { CLASS_DEFS, getClassActions } from './classes.js';
@@ -71,6 +108,8 @@ let gltfCache = { gltf1: null, gltf2: null };
 let p1ClassId = 'street';  // P1 class
 let p2ClassId = 'mma';     // P2 class
 let ghostsPerRound = 0;
+let koRevealTimer = null;
+let koAutoTimer = null;
 
 // ── Boot ──
 
@@ -112,7 +151,7 @@ async function boot() {
   }
 
   gameMode = mode;
-  autoRestart = (mode === 'train');
+  autoRestart = false;
 
   // For train mode: auto-pick classes and go straight to fight
   if (mode === 'train') {
@@ -184,7 +223,7 @@ async function menuLoop() {
     if (step === 'mode') {
       try {
         gameMode = await UI.showModeSelect();
-        autoRestart = (gameMode === 'train');
+        autoRestart = false;
         step = (gameMode === '1p') ? 'difficulty' : 'class';
       } catch (e) {
         if (e === 'back-to-splash') {
@@ -226,7 +265,8 @@ async function initMatch() {
   // Re-create players each round (reload model from cached gltf)
   // For first round, use gltfCache directly. For rematches, reload.
   // Start closer in training mode so fights happen immediately
-  const startDist = gameMode === 'train' ? 1.0 : 1.5;
+  // Spawn near live contact range so the match starts as a fight, not a walk-in.
+  const startDist = gameMode === 'train' ? 0.8 : 0.95;
 
   if (!player1) {
     player1 = new Player('p1', -startDist, p1Def, document.getElementById('p1-toast'));
@@ -378,25 +418,28 @@ function handleKO(winner, loser) {
     UI.updateGraph(ai1, ai2);
   }
 
-  if (autoRestart) {
-    setTimeout(() => {
-      koHandled = false;
-      initMatch();
-      if (hyperMode) runHyperLoop();
-    }, hyperMode ? 0 : Math.max(50, 300 / simSpeed));
-  } else {
-    // Slow motion on KO moment
-    shakeIntensity = 0.15;
-    if (player1.mixer) player1.mixer.timeScale = 0.4;
-    if (player2.mixer) player2.mixer.timeScale = 0.4;
+  // Slow motion on KO moment so the death animation reads clearly.
+  shakeIntensity = 0.15;
+  if (player1.mixer) player1.mixer.timeScale = 0.35;
+  if (player2.mixer) player2.mixer.timeScale = 0.35;
 
-    // Winner stays in idle, loser already plays Death anim from takeDamage
-    // Restore speed and show KO screen after animation plays
-    setTimeout(() => {
-      if (player1.mixer) player1.mixer.timeScale = 1;
-      if (player2.mixer) player2.mixer.timeScale = 1;
-      UI.showKO(winner);
-    }, 2500);
+  const isTrainingKO = (gameMode === 'train');
+  const revealDelay = hyperMode ? 0 : 1500;
+  const autoContinueSeconds = isTrainingKO && autoRestart ? 3 : 0;
+
+  clearTimeout(koRevealTimer);
+  clearTimeout(koAutoTimer);
+
+  koRevealTimer = setTimeout(() => {
+    if (player1.mixer) player1.mixer.timeScale = 1;
+    if (player2.mixer) player2.mixer.timeScale = 1;
+    UI.showKO(winner, loser, gameMode, autoContinueSeconds);
+  }, revealDelay);
+
+  if (autoContinueSeconds > 0) {
+    koAutoTimer = setTimeout(() => {
+      startNextRound();
+    }, revealDelay + autoContinueSeconds * 1000);
   }
 }
 
@@ -420,7 +463,7 @@ function resolveHit(attacker, victim) {
 
   if (result.blocked) {
     UI.showBlock(victim.id);
-    victim.takeDamage(result.damage, result.reaction, true);
+    victim.takeDamage(result.damage, result.reaction, true, attacker);
     UI.updateHealthBar(victim);
     shakeIntensity = 0.02;
     if (attackerAI) attackerAI.reward(-1);   // blocked
@@ -431,11 +474,12 @@ function resolveHit(attacker, victim) {
   }
 
   // Clean hit
-  victim.takeDamage(result.damage, result.reaction);
+  victim.takeDamage(result.damage, result.reaction, false, attacker);
   UI.flashHit(victim.id);
   UI.showCombo(attacker);
   UI.updateHealthBar(victim);
-  shakeIntensity = Math.min(0.15, result.damage * 0.008);
+  shakeIntensity = Math.min(0.3, result.damage * 0.016);
+  spawnHitFlash(victim.getBodyPos());
   if (attackerAI) attackerAI.reward(result.damage * 0.5);  // reward proportional to damage
   if (victimAI)   victimAI.reward(-result.damage * 0.3);   // punish for taking hit
   logger.logEvent({ event: 'hit', attacker: attacker.id, action: attacker.currentAnimName, damage: result.damage, result: 'hit' }, state);
@@ -451,27 +495,11 @@ window._toggleArena = function() {
 
 window._gameBack = function() {
   if (!confirm('Leave match?')) return;
-  // Stop current game
-  koHandled = true;
-  hyperMode = false;
-  autoRestart = false;
-  // Hide game UI
-  document.getElementById('ui').style.display = 'none';
-  UI.showTrainingDashboard(false);
-  UI.hideKO();
-  // Reset players
-  player1 = null; player2 = null;
-  ai1 = null; ai2 = null;
-  roundCount = 0; ghostRounds = 0;
-  // Remove 3D models from scene
-  scene.children.filter(c => c.type === 'Group' || c.type === 'Object3D').forEach(c => {
-    if (c.userData?.isPlayer) scene.remove(c);
-  });
-  // Re-enter menu loop
-  menuLoop().then(() => {
-    koHandled = false;
-    initMatch();
-  });
+  goHome();
+};
+
+window._goHome = function() {
+  goHome();
 };
 
 window._setSimSpeed = function(s) {
@@ -556,8 +584,11 @@ window._resetBrain2 = function() {
 // ── Manual KO handlers ──
 
 document.getElementById('ko-restart')?.addEventListener('click', () => {
-  koHandled = false;
-  initMatch();
+  startNextRound();
+});
+
+document.getElementById('ko-home')?.addEventListener('click', () => {
+  goHome();
 });
 
 document.getElementById('ko-download-log')?.addEventListener('click', () => {
@@ -585,23 +616,31 @@ window._setHyper = function(on) {
 
 function gameTick(dt) {
   logger.frameCount++;
-  processMovement(dt, player1, player2);
-  if (ai1) ai1.update(dt);
-  if (ai2) ai2.update(dt);
+  if (!player1 || !player2) return;
 
-  if (player1.model && player2.model) {
-    player1.faceTarget(player2.model.position);
-    player2.faceTarget(player1.model.position);
-    player1.pushApart(player2);
+  if (!koHandled) {
+    processMovement(dt, player1, player2);
+    if (ai1) ai1.update(dt);
+    if (ai2) ai2.update(dt);
 
-    if (!koHandled) {
-      resolveHit(player1, player2);
-      resolveHit(player2, player1);
+    if (player1.model && player2.model) {
+      player1.faceTarget(player2.model.position);
+      player2.faceTarget(player1.model.position);
+      player1.pushApart(player2);
     }
   }
 
   player1.update(dt);
   player2.update(dt);
+
+  if (player1.model && player2.model) {
+    player1.pushApart(player2);
+  }
+
+  if (player1.model && player2.model && !koHandled) {
+    resolveHit(player1, player2);
+    resolveHit(player2, player1);
+  }
 }
 
 // Hyper mode: run game logic in tight loop using setTimeout(0),
@@ -620,10 +659,8 @@ function runHyperLoop() {
     // Run up to 16ms of game logic per JS frame (~60fps yield rate)
     while (performance.now() - start < 16) {
       for (let i = 0; i < batchSize; i++) {
-        if (koHandled) break;
         gameTick(tickDt);
       }
-      if (koHandled) break;
     }
 
     renderCounter++;
@@ -655,20 +692,21 @@ function animate() {
 
   const stepDt = dt / turboSteps;
   for (let i = 0; i < turboSteps; i++) {
-    if (koHandled) break;
     gameTick(stepDt);
   }
 
   if (player1.model && player2.model) {
     UI.updateProximity(player1.model.position.distanceTo(player2.model.position));
+    updateCameraForFight(player1.model.position, player2.model.position);
   }
   updateBoneDebug();
+  updateHitFlashes(realDt);
 
   if (shakeIntensity > 0.001) {
     camera.position.x += (Math.random() - 0.5) * shakeIntensity;
-    camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.6;
-    camera.position.z += (Math.random() - 0.5) * shakeIntensity * 0.3;
-    shakeIntensity *= 0.85;
+    camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.5;
+    camera.position.z += (Math.random() - 0.5) * shakeIntensity * 0.25;
+    shakeIntensity *= 0.78;
   }
 
   updateArenaTransition();
@@ -677,3 +715,45 @@ function animate() {
 }
 
 boot();
+
+function clearKOTimers() {
+  clearTimeout(koRevealTimer);
+  clearTimeout(koAutoTimer);
+  koRevealTimer = null;
+  koAutoTimer = null;
+}
+
+function removePlayersFromScene() {
+  if (player1?.model) scene.remove(player1.model);
+  if (player2?.model) scene.remove(player2.model);
+}
+
+function startNextRound() {
+  clearKOTimers();
+  UI.hideKO();
+  koHandled = false;
+  initMatch();
+  if (hyperMode) runHyperLoop();
+}
+
+function goHome() {
+  clearKOTimers();
+  koHandled = true;
+  hyperMode = false;
+  autoRestart = false;
+  document.getElementById('ui').style.display = 'none';
+  UI.showTrainingDashboard(false);
+  UI.hideKO();
+  removePlayersFromScene();
+  player1 = null;
+  player2 = null;
+  ai1 = null;
+  ai2 = null;
+  roundCount = 0;
+  ghostRounds = 0;
+  menuLoop().then(() => {
+    autoRestart = false;
+    koHandled = false;
+    initMatch();
+  });
+}

@@ -6,6 +6,47 @@ const keyState = {};
 let p1MoveAnim = null;
 let p2MoveAnim = null;
 let _gameMode = '2p';
+let controlsBound = false;
+let activeBindings = null;
+
+function clearKeyState() {
+  Object.keys(keyState).forEach(k => { keyState[k] = false; });
+  p1MoveAnim = null;
+  p2MoveAnim = null;
+}
+
+function handleKeyDown(e) {
+  if (!activeBindings) return;
+
+  const { player1, player2, p1Actions, p2Actions, ui } = activeBindings;
+  const k = e.key;
+  keyState[k] = true;
+
+  if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(k)) {
+    e.preventDefault();
+  }
+  if (e.repeat) return;
+
+  const matchP1 = k === ' ' ? 'Space' : k.toUpperCase();
+  const a1 = p1Actions.find(a => a.key === matchP1);
+  if (a1) {
+    player1.play(a1.anim);
+    ui.setActiveBtn('p1', a1.key, 'active-p1');
+  }
+
+  if (_gameMode === '2p') {
+    const matchP2 = k.toUpperCase();
+    const a2 = p2Actions.find(a => a.key === matchP2);
+    if (a2) {
+      player2.play(a2.anim);
+      ui.setActiveBtn('p2', a2.key, 'active-p2');
+    }
+  }
+}
+
+function handleKeyUp(e) {
+  keyState[e.key] = false;
+}
 
 /**
  * Wire up keyboard listeners and bind ability keys to players.
@@ -13,38 +54,13 @@ let _gameMode = '2p';
  */
 export function initControls(player1, player2, p1Actions, p2Actions, ui, gameMode = '2p') {
   _gameMode = gameMode;
+  activeBindings = { player1, player2, p1Actions, p2Actions, ui };
+  clearKeyState();
 
-  window.addEventListener('keydown', (e) => {
-    const k = e.key;
-    keyState[k] = true;
-
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(k)) {
-      e.preventDefault();
-    }
-    if (e.repeat) return;
-
-    // P1 ability keys
-    const matchP1 = k === ' ' ? 'Space' : k.toUpperCase();
-    const a1 = p1Actions.find(a => a.key === matchP1);
-    if (a1) {
-      player1.play(a1.anim);
-      ui.setActiveBtn('p1', a1.key, 'active-p1');
-    }
-
-    // P2 ability keys (only in 2P mode)
-    if (_gameMode === '2p') {
-      const matchP2 = k.toUpperCase();
-      const a2 = p2Actions.find(a => a.key === matchP2);
-      if (a2) {
-        player2.play(a2.anim);
-        ui.setActiveBtn('p2', a2.key, 'active-p2');
-      }
-    }
-  });
-
-  window.addEventListener('keyup', (e) => {
-    keyState[e.key] = false;
-  });
+  if (controlsBound) return;
+  controlsBound = true;
+  window.addEventListener('keydown', handleKeyDown);
+  window.addEventListener('keyup', handleKeyUp);
 }
 
 /**

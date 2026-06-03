@@ -14,7 +14,7 @@ export function updateHealthBar(player) {
   const txt = el.querySelector('.health-text');
   const pct = Math.max(0, (player.health / player.maxHealth) * 100);
   bar.style.width = pct + '%';
-  txt.textContent = Math.round(player.health);
+  txt.textContent = player.health <= 0 ? 'KO' : Math.round(player.health);
 
   if (pct < 25)      bar.style.background = 'linear-gradient(90deg, #ff2020, #cc1010)';
   else if (pct < 50)  bar.style.background = player.id === 'p1'
@@ -73,17 +73,31 @@ export function showCombo(attacker) {
 // ── Proximity ──
 
 export function updateProximity(dist) {
-  if (dist < 2.0)       { proximityEl.textContent = 'IN RANGE!'; proximityEl.className = 'close'; }
-  else if (dist < 3.5)  { proximityEl.textContent = 'APPROACHING...'; proximityEl.className = 'near'; }
+  if (dist < 1.8)       { proximityEl.textContent = 'FIGHTING!'; proximityEl.className = 'close'; }
+  else if (dist < 3.2)  { proximityEl.textContent = 'APPROACHING...'; proximityEl.className = 'near'; }
   else                   { proximityEl.className = ''; }
 }
 
 // ── KO ──
 
-export function showKO(winner) {
-  const name = winner.id === 'p1' ? 'Player 1' : 'Player 2';
-  const cls = winner.classDef.name;
-  document.getElementById('ko-winner').textContent = `${name} (${cls}) WINS!`;
+export function showKO(winner, loser, gameMode, autoContinueSeconds = 0) {
+  const winnerName = winner.id === 'p1' ? 'Player 1' : 'Player 2';
+  const loserName = loser.id === 'p1' ? 'Player 1' : 'Player 2';
+  document.getElementById('ko-winner').textContent = `${winnerName} ${winner.classDef.name.toUpperCase()} WINS`;
+  document.getElementById('ko-loser').textContent = `${loserName} ${loser.classDef.name.toUpperCase()} IS KNOCKED OUT`;
+
+  const note = document.getElementById('ko-note');
+  const restartBtn = document.getElementById('ko-restart');
+  if (gameMode === 'train') {
+    restartBtn.textContent = 'NEXT ROUND';
+    note.textContent = autoContinueSeconds > 0
+      ? `AUTO NEXT ROUND IN ${autoContinueSeconds}s`
+      : 'PRESS NEXT ROUND TO CONTINUE';
+  } else {
+    restartBtn.textContent = 'REMATCH';
+    note.textContent = 'RESTART OR GO HOME';
+  }
+
   document.getElementById('ko-overlay').classList.add('show');
 }
 

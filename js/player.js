@@ -43,6 +43,8 @@ const ANIM_MAP = {
   'Finisher':        'Finisher Combo Kick',
 };
 
+const PLAYER_COLLISION_DIST = 1.5;
+
 export class Player {
   constructor(id, startX, classDef, toastEl) {
     this.id = id;
@@ -85,10 +87,13 @@ export class Player {
     this.leftHand = null;
     this.spine = null;
     this.boneNames = []; // debug
+    this._oneShotDone = null; // tracks active finished-event listener
+    this.idlePhaseOffset = Math.random() * Math.PI * 2; // per-fighter breathing phase
   }
 
   init(gltf) {
     this.model = gltf.scene;
+    this.model.userData.isPlayer = true;
     this.model.position.set(this.startX, getFloorY(), 0);
 
     this.model.traverse(child => {
@@ -98,9 +103,10 @@ export class Player {
         const mats = Array.isArray(child.material) ? child.material : [child.material];
         child.material = mats.map(m => {
           const cm = m.clone();
-          cm.roughness = 0.6;
-          cm.metalness = 0.1;
-          if (cm.color) cm.color = cm.color.clone().lerp(this.tint, 0.15);
+          cm.roughness = 0.5;
+          cm.metalness = 0.2;
+          if (cm.color) cm.color = cm.color.clone().lerp(this.tint, 0.45);
+          if (cm.emissive !== undefined) cm.emissive = this.tint.clone().multiplyScalar(0.14);
           return cm;
         });
         if (child.material.length === 1) child.material = child.material[0];
@@ -186,13 +192,35 @@ export class Player {
     action.reset().fadeIn(fadeDuration).play();
     this.currentResolvedName = resolvedName;
 
+    // Per-animation speed — makes punches snappy and sprint visually distinct
+    const ANIM_SPEED = {
+      'Jab': 1.4, 'Hook': 1.25, 'Hook_Right': 1.25, 'Cross': 1.3,
+      'Uppercut': 1.2, 'Uppercut_Combo': 1.15, 'Body_Punch': 1.25, 'Body_Punch_L': 1.25,
+      'Elbow': 1.45, 'Counter': 1.2, 'Roll': 1.35,
+      'Walk_Loop': 1.15, 'Walk_Back_Loop': 1.0,
+      'Sprint_Loop': 1.65,
+    };
+    action.timeScale = ANIM_SPEED[name] ?? 1.0;
+
     if (isOneShot) {
       action.setLoop(THREE.LoopOnce);
       action.clampWhenFinished = true;
-      const onDone = () => {
+      // Remove any previous listener to prevent stale idle transitions
+      if (this._oneShotDone) {
+        this.mixer.removeEventListener('finished', this._oneShotDone);
+        this._oneShotDone = null;
+      }
+      const capturedName = name;
+      const onDone = (e) => {
+        if (e.action !== action) return; // only react to this specific action
         this.mixer.removeEventListener('finished', onDone);
-        if (!this.gameOver) this.play('Idle_Loop', 0.4);
+        this._oneShotDone = null;
+        // Only return to idle if no other animation has taken over since
+        if (!this.gameOver && this.currentAnimName === capturedName) {
+          this.play('Idle_Loop', 0.35);
+        }
       };
+      this._oneShotDone = onDone;
       this.mixer.addEventListener('finished', onDone);
     } else {
       action.setLoop(THREE.LoopRepeat);
@@ -228,8 +256,8 @@ export class Player {
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
       // Clamp max rotation per frame to prevent spinning
-      const maxRot = 0.12;
-      this.model.rotation.y += Math.max(-maxRot, Math.min(maxRot, diff * 0.15));
+      const maxRot = 0.18;
+      this.model.rotation.y += Math.max(-maxRot, Math.min(maxRot, diff * 0.22));
     }
   }
 
@@ -239,9 +267,9 @@ export class Player {
     const moveVec = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(speed * dt);
     const newPos = this.model.position.clone().add(moveVec);
 
-    // Collision with other player — keep at arm's reach so fists touch surface not inside
+    // Keep fighters close enough for contact while still preventing mesh overlap.
     if (otherPlayer?.model) {
-      if (newPos.distanceTo(otherPlayer.model.position) < 1.4) return;
+      if (newPos.distanceTo(otherPlayer.model.position) < PLAYER_COLLISION_DIST) return;
     }
 
     this.model.position.copy(newPos);
@@ -263,7 +291,7 @@ export class Player {
     this.velocity.set(0, 0, 0);
   }
 
-  takeDamage(amount, reactionAnim, wasBlocked = false) {
+  takeDamage(amount, reactionAnim, wasBlocked = false, attacker = null) {
     if (this.gameOver) return;
     this.health = Math.max(0, this.health - amount);
 
@@ -290,16 +318,22 @@ export class Player {
       this.currentAction = null;
     }
     this.isStunned = true;
-    this.stunTimer = Math.min(1.2, 0.5 + amount * 0.02);
+    this.stunTimer = Math.min(0.65, 0.3 + amount * 0.012);
     this.currentAnimName = 'Idle_Loop'; // reset so stun guard allows reaction
     this.play(reactionAnim, 0.0); // zero fade = instant reaction
 
-    // Knockback — small push, keep characters close
+    // Knock back away from the attacker so hit reactions do not slide inward.
     if (this.model) {
-      const knockForce = Math.min(0.4, 0.1 + amount * 0.01);
-      const knockDir = this.model.position.clone().normalize();
-      if (knockDir.length() < 0.1) knockDir.set(1, 0, 0);
-      this.knockbackVel = knockDir.multiplyScalar(knockForce);
+      const knockForce = Math.min(0.32, 0.08 + amount * 0.008);
+      const knockDir = new THREE.Vector3();
+      if (attacker?.model) {
+        knockDir.subVectors(this.model.position, attacker.model.position);
+        knockDir.y = 0;
+      }
+      if (knockDir.lengthSq() < 0.0001) {
+        knockDir.set(Math.sin(this.model.rotation.y), 0, Math.cos(this.model.rotation.y));
+      }
+      this.knockbackVel = knockDir.normalize().multiplyScalar(knockForce);
     }
 
     // Small camera shake instead of mixer freeze (freeze interferes with reaction)
@@ -337,13 +371,20 @@ export class Player {
     this.play('Idle_Loop', 0.1);
   }
 
-  pushApart(other, minDist = 1.4) {
+  pushApart(other, minDist = PLAYER_COLLISION_DIST) {
     if (!this.model || !other.model) return;
     const diff = new THREE.Vector3().subVectors(this.model.position, other.model.position);
     diff.y = 0;
     const dist = diff.length();
-    if (dist < minDist && dist > 0.01) {
-      const push = diff.normalize().multiplyScalar((minDist - dist) * 0.5);
+    if (dist < minDist) {
+      if (dist <= 0.01) {
+        diff.set(
+          Math.sin(this.model.rotation.y) || 1,
+          0,
+          Math.cos(this.model.rotation.y) || 0
+        );
+      }
+      const push = diff.normalize().multiplyScalar((minDist - Math.max(dist, 0.001)) * 0.5);
       this.model.position.add(push);
       other.model.position.sub(push);
     }
@@ -354,8 +395,8 @@ export class Player {
     if (this.model) {
       // Apply knockback velocity with friction
       if (this.knockbackVel && this.knockbackVel.length() > 0.01) {
-        this.model.position.addScaledVector(this.knockbackVel, dt * 20);
-        this.knockbackVel.multiplyScalar(0.7); // friction
+        this.model.position.addScaledVector(this.knockbackVel, dt * 10);
+        this.knockbackVel.multiplyScalar(0.82); // friction
         // Clamp to arena
         const d = Math.sqrt(this.model.position.x ** 2 + this.model.position.z ** 2);
         if (d > arenaRadius) {
@@ -364,7 +405,10 @@ export class Player {
           this.knockbackVel.set(0, 0, 0);
         }
       }
-      this.model.position.y = getFloorY();
+      const breathe = (this.currentAnimName === 'Idle_Loop' || this.currentAnimName === 'Block_Loop')
+        ? Math.sin(performance.now() * 0.0022 + this.idlePhaseOffset) * 0.005
+        : 0;
+      this.model.position.y = getFloorY() + breathe;
     }
 
     // Attack elapsed in game-time

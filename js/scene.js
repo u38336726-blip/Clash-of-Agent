@@ -11,9 +11,9 @@ scene.fog = new THREE.Fog(0x0a0a18, 35, 80);
 
 // Camera
 export const camera = new THREE.PerspectiveCamera(
-  50, window.innerWidth / window.innerHeight, 0.1, 200
+  62, window.innerWidth / window.innerHeight, 0.1, 200
 );
-camera.position.set(0, 2.5, 7);
+camera.position.set(0, 1.8, 5.5);
 
 // Renderer
 export const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -27,23 +27,23 @@ document.body.appendChild(renderer.domElement);
 
 // Orbit controls
 export const orbitControls = new OrbitControls(camera, renderer.domElement);
-orbitControls.target.set(0, 1, 0);
+orbitControls.target.set(0, 1.2, 0);
 orbitControls.enableDamping = true;
-orbitControls.dampingFactor = 0.08;
+orbitControls.dampingFactor = 0.06;
 orbitControls.maxPolarAngle = Math.PI / 2;
-orbitControls.minDistance = 3;
-orbitControls.maxDistance = 15;
+orbitControls.minDistance = 2.5;
+orbitControls.maxDistance = 12;
 
 // Clock
 export const clock = new THREE.Clock();
 
 // --- Lights — cinematic arena setup ---
 
-// Ambient: soft blue-ish fill so shadows aren't pure black
-scene.add(new THREE.AmbientLight(0x303050, 0.6));
+// Ambient: minimal fill — shadows need to be dark for drama
+scene.add(new THREE.AmbientLight(0x202030, 0.2));
 
 // Hemisphere: sky=warm, ground=cool — natural outdoor arena feel
-const hemiLight = new THREE.HemisphereLight(0xffeebb, 0x303060, 0.8);
+const hemiLight = new THREE.HemisphereLight(0xffeebb, 0x303060, 0.4);
 scene.add(hemiLight);
 
 // Main sun: warm directional from above-right, casts shadows
@@ -53,15 +53,16 @@ sunLight.castShadow = true;
 sunLight.shadow.mapSize.set(4096, 4096);
 sunLight.shadow.camera.near = 0.5;
 sunLight.shadow.camera.far = 60;
-sunLight.shadow.camera.left = -20;
-sunLight.shadow.camera.right = 20;
-sunLight.shadow.camera.top = 20;
-sunLight.shadow.camera.bottom = -20;
-sunLight.shadow.bias = -0.001;
+sunLight.shadow.camera.left = -10;
+sunLight.shadow.camera.right = 10;
+sunLight.shadow.camera.top = 10;
+sunLight.shadow.camera.bottom = -10;
+sunLight.shadow.bias = -0.0003;
+sunLight.shadow.radius = 3;
 scene.add(sunLight);
 
-// Back rim light: cool blue edge light for depth separation
-const rimLight = new THREE.DirectionalLight(0x4466ff, 1.0);
+// Back rim light: strong cool blue — gives fighters a defined silhouette edge
+const rimLight = new THREE.DirectionalLight(0x5577ff, 2.8);
 rimLight.position.set(-5, 6, -8);
 scene.add(rimLight);
 
@@ -275,8 +276,43 @@ export function updateArenaTransition() {
 }
 
 export function isArenaVisible() { return arenaVisible; }
-export function getFloorY() { return arenaVisible ? 1.0 : 0; }
+export function getFloorY() { return arenaVisible ? 1.09 : 0; }
 export function isArenaReady() { return arenaReady; }
+
+// --- Arena floor markings (centre circle + cross) ---
+const markMat = new THREE.MeshBasicMaterial({ color: 0x8a6a3a, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });
+const innerRing = new THREE.Mesh(new THREE.RingGeometry(0.9, 1.06, 64), markMat);
+innerRing.rotation.x = -Math.PI / 2;
+innerRing.position.y = 0.021;
+scene.add(innerRing);
+const outerRing = new THREE.Mesh(new THREE.RingGeometry(2.9, 3.06, 64), markMat.clone());
+outerRing.rotation.x = -Math.PI / 2;
+outerRing.position.y = 0.021;
+scene.add(outerRing);
+const crossH = new THREE.Mesh(new THREE.PlaneGeometry(6.2, 0.05), markMat.clone());
+crossH.rotation.x = -Math.PI / 2;
+crossH.position.y = 0.021;
+scene.add(crossH);
+const crossV = new THREE.Mesh(new THREE.PlaneGeometry(0.05, 6.2), markMat.clone());
+crossV.rotation.x = -Math.PI / 2;
+crossV.position.y = 0.021;
+scene.add(crossV);
+
+// --- Dynamic camera: follows fighter midpoint, zooms with separation ---
+export function updateCameraForFight(p1pos, p2pos) {
+  if (!p1pos || !p2pos) return;
+  const midX = (p1pos.x + p2pos.x) * 0.5;
+  const midZ = (p1pos.z + p2pos.z) * 0.5;
+  const separation = p1pos.distanceTo(p2pos);
+  // Cap zoom-out at 7.0 so both fighters always stay in frame
+  const targetZ = Math.max(4.5, Math.min(7.0, separation * 1.3 + 3.2));
+
+  // Pull orbit target toward fight midpoint (faster lerp so camera doesn't lag)
+  orbitControls.target.x += (midX - orbitControls.target.x) * 0.07;
+  orbitControls.target.z += (midZ * 0.15 - orbitControls.target.z) * 0.07;
+  // Dynamic zoom
+  camera.position.z += (targetZ - camera.position.z) * 0.05;
+}
 
 // --- Resize ---
 window.addEventListener('resize', () => {

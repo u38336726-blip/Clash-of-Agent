@@ -477,8 +477,19 @@ canvas { display: block; }
   font-size: 10px; color: #e0e0e0; margin-top: 16px;
   text-shadow: 2px 2px 0 #000;
 }
+#ko-loser {
+  font-size: 8px; color: #ffb0b0; margin-top: 10px;
+  text-shadow: 2px 2px 0 #000;
+}
+#ko-note {
+  font-size: 6px; color: #aaa; margin-top: 12px;
+  letter-spacing: 1px; text-shadow: 1px 1px 0 #000;
+}
+#ko-actions {
+  display: flex; gap: 12px; justify-content: center; margin-top: 18px;
+}
 #ko-restart {
-  margin-top: 20px; padding: 10px 24px; font-size: 10px;
+  padding: 10px 24px; font-size: 10px;
   font-family: 'Press Start 2P', monospace;
   background: #101030; color: #80a0ff; border: 3px solid #4060aa;
   cursor: pointer; letter-spacing: 2px;
@@ -491,6 +502,23 @@ canvas { display: block; }
   box-shadow: 4px 4px 0 #000;
 }
 #ko-restart:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 #000;
+}
+#ko-home {
+  padding: 10px 24px; font-size: 10px;
+  font-family: 'Press Start 2P', monospace;
+  background: #301010; color: #ff9070; border: 3px solid #aa5030;
+  cursor: pointer; letter-spacing: 2px;
+  box-shadow: 3px 3px 0 #000;
+  transition: all 0.1s;
+}
+#ko-home:hover {
+  background: #4a1818; border-color: #dd7048;
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 #000;
+}
+#ko-home:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 #000;
 }

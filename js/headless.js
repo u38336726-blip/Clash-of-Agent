@@ -249,7 +249,10 @@ function ghostHitCheck(attacker, victim) {
   const atk = ATTACKS[attacker.currentAnimName];
   if (!atk || attacker.attackHitChecked) return null;
   if (attacker.attackElapsed < atk.hitTime) return null;
-  attacker.attackHitChecked = true;
+  if (attacker.attackElapsed > atk.hitTime + (atk.hitWindow ?? 0.14)) {
+    attacker.attackHitChecked = true;
+    return null;
+  }
 
   const dist = Math.abs(attacker.x - victim.x);
   if (dist > atk.range) return null;
@@ -270,6 +273,7 @@ function ghostHitCheck(attacker, victim) {
     if (Math.random() < dodgeChance) return { dodged: true };
   }
 
+  attacker.attackHitChecked = true;
   return { damage: atk.damage, reaction: atk.reaction };
 }
 
