@@ -262,14 +262,14 @@ export class Player {
   }
 
   move(dx, dz, speed, dt, otherPlayer) {
-    if (!this.model || this.isStunned || this.gameOver) return;
+    if (!this.model || this.isStunned || this.gameOver) return false;
 
     const moveVec = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(speed * dt);
     const newPos = this.model.position.clone().add(moveVec);
 
     // Keep fighters close enough for contact while still preventing mesh overlap.
     if (otherPlayer?.model) {
-      if (newPos.distanceTo(otherPlayer.model.position) < PLAYER_COLLISION_DIST) return;
+      if (newPos.distanceTo(otherPlayer.model.position) < PLAYER_COLLISION_DIST) return false;
     }
 
     this.model.position.copy(newPos);
@@ -284,6 +284,7 @@ export class Player {
     // Track velocity for dodge calculations
     this.velocity.copy(moveVec).divideScalar(dt);
     this.isMoving = true;
+    return true;
   }
 
   clearMovement() {

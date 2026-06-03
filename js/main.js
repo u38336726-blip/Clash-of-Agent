@@ -92,6 +92,7 @@ import { MatchLogger } from './logger.js';
 import { runGhostBatch, getGhostLog } from './headless.js';
 import { DIFFICULTIES, setDifficulty, activeDifficulty } from './difficulty.js';
 import * as UI from './ui.js';
+import { unlockAudio, playBlockSound, playHitSound, playKoSound } from './sfx.js';
 
 let player1, player2;
 let shakeIntensity = 0;
@@ -110,6 +111,9 @@ let p2ClassId = 'mma';     // P2 class
 let ghostsPerRound = 0;
 let koRevealTimer = null;
 let koAutoTimer = null;
+
+window.addEventListener('pointerdown', unlockAudio, { passive: true });
+window.addEventListener('keydown', unlockAudio);
 
 // ── Boot ──
 
@@ -379,6 +383,7 @@ function handleKO(winner, loser) {
   if (koHandled) return;
   koHandled = true;
   roundCount++;
+  playKoSound();
 
   const state = logger.captureState(player1, player2);
   logger.logEvent({ event: 'ko', attacker: winner.id, result: 'ko' }, state);
@@ -463,6 +468,7 @@ function resolveHit(attacker, victim) {
 
   if (result.blocked) {
     UI.showBlock(victim.id);
+    playBlockSound();
     victim.takeDamage(result.damage, result.reaction, true, attacker);
     UI.updateHealthBar(victim);
     shakeIntensity = 0.02;
@@ -475,6 +481,7 @@ function resolveHit(attacker, victim) {
 
   // Clean hit
   victim.takeDamage(result.damage, result.reaction, false, attacker);
+  playHitSound(result.damage);
   UI.flashHit(victim.id);
   UI.showCombo(attacker);
   UI.updateHealthBar(victim);

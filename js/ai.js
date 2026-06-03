@@ -285,7 +285,22 @@ export class AIController {
     if (this.moveForward !== 0 && !p.isStunned && !this.wantsBlock) {
       const speed = this.isSprinting ? p.sprintSpeed : p.walkSpeed;
       const moveDir = dirToOpp.clone().multiplyScalar(this.moveForward);
-      p.move(moveDir.x, moveDir.z, speed, dt, opp);
+      const moved = p.move(moveDir.x, moveDir.z, speed, dt, opp);
+
+      if (!moved && this.moveForward > 0) {
+        const queuedAtk = this.pendingAttack ? ATTACKS[this.pendingAttack.anim] : null;
+        const canCommitQueued = this.pendingAttack && queuedAtk &&
+          this.player.model.position.distanceTo(this.opponent.model.position) <= queuedAtk.range;
+
+        if (canCommitQueued && this.attackCooldown <= 0) {
+          p.play(this.pendingAttack.anim, 0.05);
+          this._logAction(this.pendingAttack.anim);
+          this.attackCooldown = 0.28 + Math.random() * 0.18;
+          this.pendingAttack = null;
+        } else if (this.attackCooldown <= 0) {
+          this._tryAttackAtDistance(this.player.model.position.distanceTo(this.opponent.model.position));
+        }
+      }
 
       // Never override an active attack animation with a walk animation
       if (!ATTACKS[p.currentAnimName]) {
