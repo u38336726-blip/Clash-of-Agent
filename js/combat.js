@@ -2,8 +2,9 @@
 
 export const ONE_SHOT = [
   'Jab', 'Hook', 'Hook_Right', 'Cross', 'Uppercut', 'Uppercut_Combo',
-  'Body_Punch', 'Body_Punch_L', 'Elbow', 'Counter',
-  'Hit_Chest', 'Hit_Head', 'Hit_Heavy',
+  'Body_Punch', 'Body_Punch_L', 'Kick_Front', 'Kick_Round', 'Kick_MMA', 'Kick_Side',
+  'Elbow', 'Counter',
+  'Hit_Chest', 'Hit_Head', 'Hit_Heavy', 'Hit_Kick', 'Hit_KickR', 'Hit_KickM', 'Hit_Uppercut',
   'Death01', 'Death02', 'GetUp', 'Roll',
 ];
 
@@ -16,6 +17,10 @@ export const ATTACKS = {
   'Uppercut_Combo':{ damage: 22, range: 1.78, idealDist: 1.45, hitTime: 0.28, hitWindow: 0.16, contactRadius: 0.6,  forwardDot: 0.04, reaction: 'Hit_Heavy', type: 'melee' },
   'Body_Punch':    { damage: 12, range: 1.76, idealDist: 1.44, hitTime: 0.20, hitWindow: 0.12, contactRadius: 0.58, forwardDot: 0.04, reaction: 'Hit_Chest', type: 'melee' },
   'Body_Punch_L':  { damage: 12, range: 1.76, idealDist: 1.44, hitTime: 0.20, hitWindow: 0.12, contactRadius: 0.58, forwardDot: 0.04, reaction: 'Hit_Chest', type: 'melee' },
+  'Kick_Front':    { damage: 18, range: 2.16, idealDist: 1.72, hitTime: 0.28, hitWindow: 0.16, contactRadius: 0.76, forwardDot: 0.08, reaction: 'Hit_Kick', type: 'kick' },
+  'Kick_Round':    { damage: 20, range: 2.22, idealDist: 1.8,  hitTime: 0.34, hitWindow: 0.18, contactRadius: 0.84, forwardDot: -0.02, reaction: 'Hit_KickR', type: 'kick' },
+  'Kick_MMA':      { damage: 22, range: 2.2,  idealDist: 1.82, hitTime: 0.32, hitWindow: 0.18, contactRadius: 0.82, forwardDot: -0.04, reaction: 'Hit_KickM', type: 'kick' },
+  'Kick_Side':     { damage: 19, range: 2.14, idealDist: 1.76, hitTime: 0.26, hitWindow: 0.16, contactRadius: 0.78, forwardDot: 0.02, reaction: 'Hit_Kick', type: 'kick' },
   'Elbow':         { damage: 14, range: 1.64, idealDist: 1.36, hitTime: 0.15, hitWindow: 0.1,  contactRadius: 0.48, forwardDot: -0.04, reaction: 'Hit_Heavy', type: 'melee' },
   'Counter':       { damage: 20, range: 1.82, idealDist: 1.5,  hitTime: 0.25, hitWindow: 0.14, contactRadius: 0.62, forwardDot: 0.04, reaction: 'Hit_Heavy', type: 'melee' },
 };
@@ -45,17 +50,17 @@ function isFacingVictim(attacker, victim, minDot) {
 }
 
 function hasVisibleContact(attacker, victim, atk, centerDist) {
-  const handPos = attacker.getAttackHandPos?.();
+  const contactPos = attacker.getAttackContactPos?.() ?? attacker.getAttackHandPos?.();
   const bodyPos = victim.getBodyPos?.();
   const idealRange = Math.min(atk.range, (atk.idealDist ?? atk.range) + IDEAL_RANGE_SLACK);
-  if (!handPos || !bodyPos) {
+  if (!contactPos || !bodyPos) {
     return centerDist <= idealRange;
   }
-  const handToBodyDist = handPos.distanceTo(bodyPos);
-  if (handToBodyDist <= atk.contactRadius + CONTACT_RADIUS_SLACK) {
+  const contactDist = contactPos.distanceTo(bodyPos);
+  if (contactDist <= atk.contactRadius + CONTACT_RADIUS_SLACK) {
     return true;
   }
-  return centerDist <= idealRange && handToBodyDist <= atk.contactRadius + CONTACT_RADIUS_SLACK * 1.8;
+  return centerDist <= idealRange && contactDist <= atk.contactRadius + CONTACT_RADIUS_SLACK * 1.8;
 }
 
 export function checkAttackHit(attacker, victim) {

@@ -85,9 +85,11 @@ export class Player {
     this.isBlocking = false;
     this.knockbackVel = new THREE.Vector3();
 
-    // Bone references for wrist-level hit detection
+    // Bone references for hand/foot-level hit detection
     this.rightHand = null;
     this.leftHand = null;
+    this.rightFoot = null;
+    this.leftFoot = null;
     this.spine = null;
     this.boneNames = []; // debug
     this._oneShotDone = null; // tracks active finished-event listener
@@ -135,7 +137,7 @@ export class Player {
       this.animations[clip.name] = this.mixer.clipAction(clip);
     });
 
-    // Find hand/spine bones — search ALL objects (GLB skeletons are Object3D not THREE.Bone)
+    // Find hand/foot/spine bones — search ALL objects (GLB skeletons are Object3D not THREE.Bone)
     const skip = ['index','middle','thumb','ring','pinky'];
     this.model.traverse(obj => {
       if (!obj.name) return;
@@ -146,6 +148,22 @@ export class Player {
         if (n.includes('righthand') && !this.rightHand) this.rightHand = obj;
         if (n.includes('lefthand')  && !this.leftHand)  this.leftHand  = obj;
       }
+      if (!this.rightFoot && (
+        n.includes('rightfoot') ||
+        n.includes('foot_r') ||
+        n.includes('r_foot') ||
+        n.includes('righttoe') ||
+        n.includes('toe_r') ||
+        n.includes('rightankle')
+      )) this.rightFoot = obj;
+      if (!this.leftFoot && (
+        n.includes('leftfoot') ||
+        n.includes('foot_l') ||
+        n.includes('l_foot') ||
+        n.includes('lefttoe') ||
+        n.includes('toe_l') ||
+        n.includes('leftankle')
+      )) this.leftFoot = obj;
       // spine/chest for body hit target
       if (!this.spine && (n.includes('spine1') || n.includes('chest') || n.includes('spine'))) {
         this.spine = obj;
@@ -153,7 +171,7 @@ export class Player {
     });
 
     // Debug — print all found bone names
-    console.log(`[${this.id}] Bones found: RightHand=${this.rightHand?.name} LeftHand=${this.leftHand?.name} Spine=${this.spine?.name}`);
+    console.log(`[${this.id}] Bones found: RightHand=${this.rightHand?.name} LeftHand=${this.leftHand?.name} RightFoot=${this.rightFoot?.name} LeftFoot=${this.leftFoot?.name} Spine=${this.spine?.name}`);
     if (!this.rightHand) {
       console.warn(`[${this.id}] Hand bones not found. All names:`, this.boneNames.filter(n => n.length > 2).join(', '));
     }
@@ -161,10 +179,38 @@ export class Player {
     this.play('Idle_Loop', 0.3);
   }
 
-  // Returns world position of the attacking wrist bone based on current attack
-  getAttackHandPos() {
+  getKickContactPos() {
+    if (!this.model) return null;
+    const forward = new THREE.Vector3(Math.sin(this.model.rotation.y), 0, Math.cos(this.model.rotation.y));
+    const scoredFeet = [this.rightFoot, this.leftFoot]
+      .filter(Boolean)
+      .map(bone => {
+        const pos = new THREE.Vector3();
+        bone.getWorldPosition(pos);
+        const planarOffset = pos.clone().sub(this.model.position).setY(0);
+        return { pos, score: planarOffset.dot(forward) + planarOffset.length() * 0.2 };
+      });
+
+    if (scoredFeet.length > 0) {
+      scoredFeet.sort((a, b) => b.score - a.score);
+      return scoredFeet[0].pos;
+    }
+
+    // Fallback if foot bones are missing: approximate the striking foot position in front of the torso.
+    const pos = this.model.position.clone();
+    pos.addScaledVector(forward, 0.95);
+    pos.y += 0.78;
+    return pos;
+  }
+
+  // Returns world position of the active hand/foot contact point based on current attack
+  getAttackContactPos() {
     if (!this.model) return null;
     const anim = this.currentAnimName;
+    const kickAtks = new Set(['Kick_Front', 'Kick_Round', 'Kick_MMA', 'Kick_Side']);
+    if (kickAtks.has(anim)) {
+      return this.getKickContactPos();
+    }
 
     // Map attacks to which hand they use
     const leftHandAtks  = new Set(['Jab','Hook','Body_Punch_L','Uppercut_Combo']);
@@ -181,6 +227,11 @@ export class Player {
     return pos;
   }
 
+  // Backward-compatible alias used by older combat checks.
+  getAttackHandPos() {
+    return this.getAttackContactPos();
+  }
+
   // Returns world position of the body center (chest area) for receiving hits
   getBodyPos() {
     if (!this.model) return null;
@@ -194,7 +245,10 @@ export class Player {
 
   play(name, fadeDuration = 0.35) {
     if (this.gameOver && !['Death01', 'Death02', 'Lying_Down', 'Idle_Loop'].includes(name)) return;
-    const reactionAnims = ['Hit_Chest','Hit_Head','Hit_Heavy','Death01','Death02','Block_Loop'];
+    const reactionAnims = [
+      'Hit_Chest','Hit_Head','Hit_Heavy','Hit_Kick','Hit_KickR','Hit_KickM','Hit_Uppercut',
+      'Death01','Death02','Block_Loop'
+    ];
     if (this.isStunned && !reactionAnims.includes(name)) return;
 
     const resolvedName = ANIM_MAP[name] ?? name;
@@ -211,6 +265,7 @@ export class Player {
     const ANIM_SPEED = {
       'Jab': 1.4, 'Hook': 1.25, 'Hook_Right': 1.25, 'Cross': 1.3,
       'Uppercut': 1.2, 'Uppercut_Combo': 1.15, 'Body_Punch': 1.25, 'Body_Punch_L': 1.25,
+      'Kick_Front': 1.08, 'Kick_Round': 1.02, 'Kick_MMA': 0.98, 'Kick_Side': 1.05,
       'Elbow': 1.45, 'Counter': 1.2, 'Roll': 1.35,
       'Walk_Loop': 1.15, 'Walk_Back_Loop': 1.0,
       'Sprint_Loop': 1.65,
