@@ -20,6 +20,9 @@ export const ATTACKS = {
   'Counter':       { damage: 20, range: 1.82, idealDist: 1.5,  hitTime: 0.25, hitWindow: 0.14, contactRadius: 0.62, forwardDot: 0.04, reaction: 'Hit_Heavy', type: 'melee' },
 };
 
+const CONTACT_RADIUS_SLACK = 0.18;
+const IDEAL_RANGE_SLACK = 0.22; // must cover gap between idealDist and PLAYER_COLLISION_DIST (1.56)
+
 function isAttackActive(attacker, atk) {
   if (attacker.attackElapsed < atk.hitTime) return false;
   if (attacker.attackElapsed > atk.hitTime + (atk.hitWindow ?? 0.14)) {
@@ -44,10 +47,15 @@ function isFacingVictim(attacker, victim, minDot) {
 function hasVisibleContact(attacker, victim, atk, centerDist) {
   const handPos = attacker.getAttackHandPos?.();
   const bodyPos = victim.getBodyPos?.();
+  const idealRange = Math.min(atk.range, (atk.idealDist ?? atk.range) + IDEAL_RANGE_SLACK);
   if (!handPos || !bodyPos) {
-    return centerDist <= atk.range * 0.92;
+    return centerDist <= idealRange;
   }
-  return handPos.distanceTo(bodyPos) <= atk.contactRadius;
+  const handToBodyDist = handPos.distanceTo(bodyPos);
+  if (handToBodyDist <= atk.contactRadius + CONTACT_RADIUS_SLACK) {
+    return true;
+  }
+  return centerDist <= idealRange && handToBodyDist <= atk.contactRadius + CONTACT_RADIUS_SLACK * 1.8;
 }
 
 export function checkAttackHit(attacker, victim) {

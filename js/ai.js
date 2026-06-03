@@ -6,8 +6,8 @@ import { activeDifficulty } from './difficulty.js';
 
 initBrainCombatRef(ATTACKS);
 
-const DEFAULT_FIGHT_DISTANCE = 1.5;
-const DISTANCE_TOLERANCE = 0.1;
+const DEFAULT_FIGHT_DISTANCE = 1.56; // matches PLAYER_COLLISION_DIST — fighters stand at contact range
+const DISTANCE_TOLERANCE = 0.25;    // wide enough to fire at collision boundary for all idealDist values
 
 function getIdealAttackDistance(animName) {
   return ATTACKS[animName]?.idealDist ?? DEFAULT_FIGHT_DISTANCE;

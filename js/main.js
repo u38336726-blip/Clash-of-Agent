@@ -654,6 +654,7 @@ function gameTick(dt) {
   if (player1.model && player2.model && !koHandled) {
     resolveHit(player1, player2);
     resolveHit(player2, player1);
+    player1.pushApart(player2);
   }
 }
 

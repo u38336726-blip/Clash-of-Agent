@@ -44,7 +44,9 @@ const ANIM_MAP = {
 };
 
 const PLAYER_COLLISION_DIST = 1.56;
-const PLAYER_ATTACK_SEPARATION_DIST = 1.62;
+const PLAYER_ATTACK_SEPARATION_DIST = 1.56;
+const PLAYER_BODY_COLLISION_DIST = 0.84;
+const PLAYER_ATTACK_BODY_SEPARATION_DIST = 0.78;
 
 export class Player {
   constructor(id, startX, classDef, toastEl) {
@@ -280,9 +282,12 @@ export class Player {
     const moveVec = new THREE.Vector3(dx, 0, dz).normalize().multiplyScalar(speed * dt);
     const newPos = this.model.position.clone().add(moveVec);
 
-    // Keep fighters close enough for contact while still preventing mesh overlap.
+    // Keep fighters close enough for contact while still preventing visible torso overlap.
     if (otherPlayer?.model) {
-      if (newPos.distanceTo(otherPlayer.model.position) < PLAYER_COLLISION_DIST) return false;
+      const separation = this.getSeparationState(otherPlayer, PLAYER_COLLISION_DIST, moveVec);
+      if (separation.rootDist < separation.rootMinDist || separation.bodyDist < separation.bodyMinDist) {
+        return false;
+      }
     }
 
     this.model.position.copy(newPos);
@@ -398,23 +403,66 @@ export class Player {
     this.play('Idle_Loop', 0.1);
   }
 
+  getSeparationState(other, minRootDist = PLAYER_COLLISION_DIST, moveOffset = null) {
+    const inCloseCombat = Boolean(
+      ATTACKS[this.currentAnimName] ||
+      ATTACKS[other.currentAnimName] ||
+      this.isStunned ||
+      other.isStunned
+    );
+    const rootMinDist = inCloseCombat
+      ? Math.max(minRootDist, PLAYER_ATTACK_SEPARATION_DIST)
+      : minRootDist;
+    const bodyMinDist = inCloseCombat
+      ? PLAYER_ATTACK_BODY_SEPARATION_DIST
+      : PLAYER_BODY_COLLISION_DIST;
+
+    const thisRoot = this.model.position.clone();
+    const otherRoot = other.model.position.clone();
+    if (moveOffset) thisRoot.add(moveOffset);
+
+    const rootDiff = new THREE.Vector3().subVectors(thisRoot, otherRoot);
+    rootDiff.y = 0;
+
+    const thisBody = this.getBodyPos()?.clone() ?? thisRoot.clone().setY(getFloorY() + 1.1);
+    const otherBody = other.getBodyPos?.()?.clone() ?? otherRoot.clone().setY(getFloorY() + 1.1);
+    if (moveOffset) thisBody.add(moveOffset);
+    thisBody.y = 0;
+    otherBody.y = 0;
+
+    const bodyDiff = new THREE.Vector3().subVectors(thisBody, otherBody);
+
+    return {
+      rootDiff,
+      bodyDiff,
+      rootDist: rootDiff.length(),
+      bodyDist: bodyDiff.length(),
+      rootMinDist,
+      bodyMinDist,
+    };
+  }
+
   pushApart(other, minDist = PLAYER_COLLISION_DIST) {
     if (!this.model || !other.model) return;
-    const effectiveMinDist = (ATTACKS[this.currentAnimName] || ATTACKS[other.currentAnimName] || this.isStunned || other.isStunned)
-      ? Math.max(minDist, PLAYER_ATTACK_SEPARATION_DIST)
-      : minDist;
-    const diff = new THREE.Vector3().subVectors(this.model.position, other.model.position);
-    diff.y = 0;
-    const dist = diff.length();
-    if (dist < effectiveMinDist) {
-      if (dist <= 0.01) {
+    const separation = this.getSeparationState(other, minDist);
+    const overlap = Math.max(
+      separation.rootMinDist - separation.rootDist,
+      separation.bodyMinDist - separation.bodyDist,
+      0
+    );
+
+    if (overlap > 0) {
+      const diff = separation.bodyDiff.lengthSq() > 0.0001
+        ? separation.bodyDiff
+        : separation.rootDiff;
+      if (diff.lengthSq() <= 0.0001) {
         diff.set(
           Math.sin(this.model.rotation.y) || 1,
           0,
           Math.cos(this.model.rotation.y) || 0
         );
       }
-      const push = diff.normalize().multiplyScalar((effectiveMinDist - Math.max(dist, 0.001)) * 0.5);
+      const push = diff.normalize().multiplyScalar((overlap + 0.02) * 0.5);
       this.model.position.add(push);
       other.model.position.sub(push);
     }
