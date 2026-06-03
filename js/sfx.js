@@ -1,5 +1,10 @@
 let audioCtx = null;
 let noiseBuffer = null;
+let lastImpactSoundAt = -Infinity;
+let lastKoSoundAt = -Infinity;
+
+const IMPACT_SOUND_MIN_GAP = 0.055;
+const KO_SOUND_MIN_GAP = 0.2;
 
 function getAudioContext() {
   if (audioCtx || (typeof window === 'undefined')) return audioCtx;
@@ -28,12 +33,34 @@ function shapeGain(node, startTime, peak, attack, release) {
 
 export function unlockAudio() {
   const ctx = getAudioContext();
-  if (ctx?.state === 'suspended') ctx.resume();
+  if (ctx && ctx.state !== 'running') {
+    ctx.resume().catch(() => {});
+  }
 }
 
-function playBurst({ peak, baseFreq, endFreq, noiseFreq, duration }) {
+function canPlayNow(kind) {
   const ctx = getAudioContext();
-  if (!ctx || ctx.state !== 'running') return;
+  if (!ctx) return null;
+  if (ctx.state !== 'running') {
+    ctx.resume().catch(() => {});
+    return null;
+  }
+
+  const now = ctx.currentTime;
+  if (kind === 'impact') {
+    if (now - lastImpactSoundAt < IMPACT_SOUND_MIN_GAP) return null;
+    lastImpactSoundAt = now;
+  } else if (kind === 'ko') {
+    if (now - lastKoSoundAt < KO_SOUND_MIN_GAP) return null;
+    lastKoSoundAt = now;
+  }
+
+  return ctx;
+}
+
+function playBurst({ peak, baseFreq, endFreq, noiseFreq, duration, kind = 'impact' }) {
+  const ctx = canPlayNow(kind);
+  if (!ctx) return;
 
   const t = ctx.currentTime;
   const out = ctx.createGain();
@@ -70,17 +97,12 @@ export function playHitSound(power = 1) {
     endFreq: 55 + power * 0.4,
     noiseFreq: 880 + power * 9,
     duration: 0.08 + Math.min(0.05, power * 0.0015),
+    kind: 'impact',
   });
 }
 
 export function playBlockSound() {
-  playBurst({
-    peak: 0.05,
-    baseFreq: 320,
-    endFreq: 150,
-    noiseFreq: 1800,
-    duration: 0.06,
-  });
+  playHitSound(10);
 }
 
 export function playKoSound() {
@@ -90,5 +112,6 @@ export function playKoSound() {
     endFreq: 42,
     noiseFreq: 520,
     duration: 0.18,
+    kind: 'ko',
   });
 }
