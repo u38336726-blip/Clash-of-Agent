@@ -426,7 +426,12 @@ export function showTrainingDashboard(show) {
 
 export function updateSpeedDisplay(speed) {
   const el = document.getElementById('speed-val');
-  if (el) el.textContent = speed + 'x';
+  if (el) el.textContent = formatSpeed(speed);
+}
+
+function formatSpeed(speed) {
+  if (Number.isInteger(speed)) return speed + 'x';
+  return speed.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') + 'x';
 }
 
 function winColor(wr) {
@@ -447,7 +452,7 @@ export function updateTrainingStats(ai1, ai2, rounds, speed, ghostRounds = 0) {
     <div class="ts-row"><span class="ts-label">VISIBLE</span><span class="ts-val">${rounds - ghostRounds}</span></div>
     <div class="ts-row"><span class="ts-label">GHOST</span><span class="ts-val" style="color:#80ff80">${ghostRounds}</span></div>
     <div class="ts-row"><span class="ts-label">TOTAL</span><span class="ts-val" style="color:#ffcc40">${rounds}</span></div>
-    <div class="ts-row"><span class="ts-label">SPEED</span><span class="ts-val">${speed}x</span></div>
+    <div class="ts-row"><span class="ts-label">SPEED</span><span class="ts-val">${formatSpeed(speed)}</span></div>
     <div class="ts-divider"></div>
     <div class="ts-header" style="color:#4090ff">AI-1 (BLUE)</div>
     <div class="ts-row"><span class="ts-label">W / L</span><span class="ts-val">${s1.wins||0} / ${s1.losses||0}</span></div>

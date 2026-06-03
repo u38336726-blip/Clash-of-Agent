@@ -99,9 +99,14 @@ let shakeIntensity = 0;
 let gameMode = 'train'; // AI vs AI direct
 let ai1 = null, ai2 = null;
 const logger = new MatchLogger();
+const DEFAULT_TRAIN_SIM_SPEED = 0.85;
+
+function getDefaultSimSpeed(mode) {
+  return mode === 'train' ? DEFAULT_TRAIN_SIM_SPEED : 1;
+}
 
 // Training state
-let simSpeed = 1;
+let simSpeed = getDefaultSimSpeed(gameMode);
 let autoRestart = false; // show KO screen, don't auto-restart
 let roundCount = 0;
 let ghostRounds = 0;
@@ -155,6 +160,7 @@ async function boot() {
   }
 
   gameMode = mode;
+  simSpeed = getDefaultSimSpeed(gameMode);
   autoRestart = false;
 
   // For train mode: auto-pick classes and go straight to fight
@@ -227,6 +233,7 @@ async function menuLoop() {
     if (step === 'mode') {
       try {
         gameMode = await UI.showModeSelect();
+        simSpeed = getDefaultSimSpeed(gameMode);
         autoRestart = false;
         step = (gameMode === '1p') ? 'difficulty' : 'class';
       } catch (e) {

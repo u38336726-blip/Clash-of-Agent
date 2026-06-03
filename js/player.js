@@ -43,7 +43,8 @@ const ANIM_MAP = {
   'Finisher':        'Finisher Combo Kick',
 };
 
-const PLAYER_COLLISION_DIST = 1.5;
+const PLAYER_COLLISION_DIST = 1.56;
+const PLAYER_ATTACK_SEPARATION_DIST = 1.62;
 
 export class Player {
   constructor(id, startX, classDef, toastEl) {
@@ -98,9 +99,21 @@ export class Player {
 
     this.model.traverse(child => {
       if (child.isMesh) {
+        const mats = Array.isArray(child.material) ? child.material : [child.material];
+        const isShadowHelper =
+          child.name?.toLowerCase().includes('spritemesh') ||
+          child.parent?.name?.toLowerCase().includes('shadow') ||
+          mats.some(m => m?.name?.toLowerCase().includes('shadow'));
+
+        if (isShadowHelper) {
+          child.visible = false;
+          child.castShadow = false;
+          child.receiveShadow = false;
+          return;
+        }
+
         child.castShadow = true;
         child.receiveShadow = true;
-        const mats = Array.isArray(child.material) ? child.material : [child.material];
         child.material = mats.map(m => {
           const cm = m.clone();
           cm.roughness = 0.5;
@@ -310,7 +323,17 @@ export class Player {
       return;
     }
 
-    if (wasBlocked && this.isBlocking) return;
+    if (wasBlocked && this.isBlocking) {
+      if (attacker?.model && this.model) {
+        const blockDir = new THREE.Vector3().subVectors(this.model.position, attacker.model.position);
+        blockDir.y = 0;
+        if (blockDir.lengthSq() > 0.0001) {
+          this.knockbackVel = blockDir.normalize().multiplyScalar(0.05 + amount * 0.002);
+        }
+        this.pushApart(attacker, PLAYER_ATTACK_SEPARATION_DIST);
+      }
+      return;
+    }
 
     // Play reaction FIRST before any freeze so it's queued correctly
     // Force stop current animation then play reaction
@@ -335,6 +358,9 @@ export class Player {
         knockDir.set(Math.sin(this.model.rotation.y), 0, Math.cos(this.model.rotation.y));
       }
       this.knockbackVel = knockDir.normalize().multiplyScalar(knockForce);
+      if (attacker?.model) {
+        this.pushApart(attacker, PLAYER_ATTACK_SEPARATION_DIST);
+      }
     }
 
     // Small camera shake instead of mixer freeze (freeze interferes with reaction)
@@ -374,10 +400,13 @@ export class Player {
 
   pushApart(other, minDist = PLAYER_COLLISION_DIST) {
     if (!this.model || !other.model) return;
+    const effectiveMinDist = (ATTACKS[this.currentAnimName] || ATTACKS[other.currentAnimName] || this.isStunned || other.isStunned)
+      ? Math.max(minDist, PLAYER_ATTACK_SEPARATION_DIST)
+      : minDist;
     const diff = new THREE.Vector3().subVectors(this.model.position, other.model.position);
     diff.y = 0;
     const dist = diff.length();
-    if (dist < minDist) {
+    if (dist < effectiveMinDist) {
       if (dist <= 0.01) {
         diff.set(
           Math.sin(this.model.rotation.y) || 1,
@@ -385,7 +414,7 @@ export class Player {
           Math.cos(this.model.rotation.y) || 0
         );
       }
-      const push = diff.normalize().multiplyScalar((minDist - Math.max(dist, 0.001)) * 0.5);
+      const push = diff.normalize().multiplyScalar((effectiveMinDist - Math.max(dist, 0.001)) * 0.5);
       this.model.position.add(push);
       other.model.position.sub(push);
     }
