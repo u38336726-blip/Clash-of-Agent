@@ -6,7 +6,11 @@
 <title>Animation Tester</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #0a0a18; color: #fff; font-family: monospace; display: flex; height: 100vh; overflow: hidden; }
+  html, body { width: 100%; min-height: 100%; }
+  body {
+    background: #0a0a18; color: #fff; font-family: monospace;
+    display: flex; min-height: 100dvh; overflow: hidden;
+  }
 
   #viewport { flex: 1; position: relative; }
   #viewport canvas { width: 100% !important; height: 100% !important; }
@@ -19,7 +23,7 @@
   }
 
   #sidebar {
-    width: 300px; background: #0d0d20; border-left: 1px solid #222;
+    width: min(300px, 32vw); min-width: 260px; background: #0d0d20; border-left: 1px solid #222;
     display: flex; flex-direction: column; overflow: hidden;
   }
 
@@ -62,6 +66,62 @@
     font-size: 10px; color: #555; min-height: 32px;
   }
   #status span { color: #4488ff; }
+
+  @media (max-width: 900px) {
+    body {
+      flex-direction: column;
+    }
+
+    #viewport {
+      min-height: 52dvh;
+    }
+
+    #anim-label {
+      bottom: 14px;
+      font-size: 16px;
+      letter-spacing: 1px;
+      text-align: center;
+      width: calc(100% - 24px);
+    }
+
+    #sidebar {
+      width: 100%;
+      min-width: 0;
+      max-height: 48dvh;
+      border-left: 0;
+      border-top: 1px solid #222;
+    }
+  }
+
+  @media (max-width: 560px) {
+    #sidebar-header {
+      padding: 10px 12px;
+    }
+
+    #sidebar-header h2 {
+      font-size: 11px;
+    }
+
+    #back-btn {
+      font-size: 10px;
+      padding: 4px 8px;
+    }
+
+    #anim-scroll {
+      padding: 6px;
+    }
+
+    .anim-btn {
+      font-size: 10px;
+      padding: 8px 9px;
+    }
+
+    #status {
+      font-size: 9px;
+      min-height: 28px;
+      padding: 7px 10px;
+    }
+  }
 </style>
 </head>
 <body>
@@ -92,6 +152,16 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { unlockAudio, setAudioScene, playUiSelectSound } from './js/sfx.js';
+
+window.addEventListener('pointerdown', unlockAudio, { passive: true });
+window.addEventListener('keydown', unlockAudio);
+setAudioScene('menu');
+document.addEventListener('click', (event) => {
+  const button = event.target.closest('button');
+  if (!button || button.disabled) return;
+  playUiSelectSound(button.id === 'back-btn' ? 'back' : 'select');
+}, true);
 
 // ── Scene ──
 const scene = new THREE.Scene();

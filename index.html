@@ -157,7 +157,7 @@
   </div>
 
   <div id="ko-overlay">
-    <div id="ko-text">K.O.</div>
+    <div id="ko-text">Knock Out</div>
     <div id="ko-winner"></div>
     <div id="ko-loser"></div>
     <div id="ko-note"></div>
@@ -169,13 +169,12 @@
 </div>
 
 <!-- Animation Test Panel -->
-<div id="anim-test-panel" style="display:none;position:fixed;top:10px;right:10px;background:rgba(0,0,0,0.85);color:#fff;padding:12px;border-radius:8px;font-family:monospace;font-size:11px;z-index:999;max-height:90vh;overflow-y:auto;width:220px">
+<div id="anim-test-panel" style="display:none;">
   <div style="font-weight:bold;margin-bottom:8px;color:#ffcc00">ANIMATION TESTER</div>
   <div style="margin-bottom:6px;color:#aaa">P1 (left) | P2 (right)</div>
   <div id="anim-buttons"></div>
-  <button onclick="document.getElementById('anim-test-panel').style.display='none'" style="margin-top:8px;width:100%">CLOSE</button>
+  <button id="anim-test-close" onclick="document.getElementById('anim-test-panel').style.display='none'">CLOSE</button>
 </div>
-<button onclick="document.getElementById('anim-test-panel').style.display='block'" style="position:fixed;bottom:10px;left:10px;z-index:999;font-size:11px;padding:4px 8px">TEST ANIMS</button>
 
 <script type="importmap">
 {

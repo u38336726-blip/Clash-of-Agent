@@ -92,7 +92,15 @@ import { MatchLogger } from './logger.js';
 import { runGhostBatch, getGhostLog } from './headless.js';
 import { DIFFICULTIES, setDifficulty, activeDifficulty } from './difficulty.js';
 import * as UI from './ui.js';
-import { unlockAudio, playBlockSound, playHitSound, playKoSound } from './sfx.js';
+import {
+  unlockAudio,
+  setAudioScene,
+  playUiSelectSound,
+  playRoundStartSound,
+  playBlockSound,
+  playHitSound,
+  playKoSound,
+} from './sfx.js';
 
 let player1, player2;
 let shakeIntensity = 0;
@@ -119,11 +127,30 @@ let koAutoTimer = null;
 
 window.addEventListener('pointerdown', unlockAudio, { passive: true });
 window.addEventListener('keydown', unlockAudio);
+setAudioScene('menu');
+
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('button, .class-card, a');
+  if (!target || target.disabled) return;
+
+  let kind = 'select';
+  if (target.classList.contains('back-btn') || target.id === 'game-back' || target.id === 'ko-home' || target.id === 'back-btn') {
+    kind = 'back';
+  } else if (target.id === 'splash-start' || target.id === 'fight-btn' || target.id === 'ko-restart') {
+    kind = 'confirm';
+  } else if (target.classList.contains('speed-btn') || target.classList.contains('train-btn') || target.id === 'arena-toggle') {
+    kind = 'toggle';
+  }
+
+  playUiSelectSound(kind);
+}, true);
 
 // ── Boot ──
 
 async function boot() {
   // Show mode select directly (skip splash)
+  delete document.body.dataset.mode;
+  setAudioScene('menu');
   document.getElementById('splash-screen').style.display = 'none';
   document.getElementById('mode-select').style.display = 'flex';
 
@@ -160,6 +187,7 @@ async function boot() {
   }
 
   gameMode = mode;
+  document.body.dataset.mode = gameMode;
   simSpeed = getDefaultSimSpeed(gameMode);
   autoRestart = false;
 
@@ -233,6 +261,7 @@ async function menuLoop() {
     if (step === 'mode') {
       try {
         gameMode = await UI.showModeSelect();
+        document.body.dataset.mode = gameMode;
         simSpeed = getDefaultSimSpeed(gameMode);
         autoRestart = false;
         step = (gameMode === '1p') ? 'difficulty' : 'class';
@@ -272,6 +301,7 @@ async function menuLoop() {
 async function initMatch() {
   const p1Def = CLASS_DEFS[p1ClassId];
   const p2Def = CLASS_DEFS[p2ClassId];
+  const sceneName = gameMode === 'train' ? 'train' : 'fight';
 
   // Re-create players each round (reload model from cached gltf)
   // For first round, use gltfCache directly. For rematches, reload.
@@ -302,6 +332,8 @@ async function initMatch() {
   const p2Actions = getClassActions(p2ClassId, 'p2');
 
   UI.showGameUI();
+  setAudioScene(sceneName);
+  playRoundStartSound(sceneName);
   // Auto-reveal arena on match start
   if (isArenaReady() && !isArenaVisible()) toggleArena(3.0);
   UI.buildPanel('p1-panel', p1Actions, player1, 'active-p1');
@@ -390,6 +422,7 @@ function handleKO(winner, loser) {
   if (koHandled) return;
   koHandled = true;
   roundCount++;
+  setAudioScene('ko');
   playKoSound();
 
   const state = logger.captureState(player1, player2);
@@ -756,6 +789,8 @@ function goHome() {
   koHandled = true;
   hyperMode = false;
   autoRestart = false;
+  delete document.body.dataset.mode;
+  setAudioScene('menu');
   document.getElementById('ui').style.display = 'none';
   UI.showTrainingDashboard(false);
   UI.hideKO();

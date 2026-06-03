@@ -38,20 +38,24 @@ export function flashHit(victimId) {
 // ── Dodge toast ──
 
 export function showDodge(victimId) {
-  showStatusToast(`${victimId === 'p1' ? 'P1' : 'P2'} DODGED!`, '#40ff90');
+  showStatusToast(`${victimId === 'p1' ? 'P1' : 'P2'} DODGED!`, 'toast-dodge');
 }
 
 export function showBlock(victimId) {
-  showStatusToast(`${victimId === 'p1' ? 'P1' : 'P2'} BLOCKED!`, '#60c0ff');
+  showStatusToast(`${victimId === 'p1' ? 'P1' : 'P2'} BLOCKED!`, 'toast-block');
 }
 
-function showStatusToast(text, color) {
+function showStatusToast(text, variant) {
   dodgeToast.textContent = text;
-  dodgeToast.style.color = color;
-  dodgeToast.style.textShadow = `0 0 12px ${color}80`;
+  dodgeToast.className = variant;
+  // Force animation restart when the same toast appears rapidly.
+  void dodgeToast.offsetWidth;
   dodgeToast.classList.add('show');
   clearTimeout(dodgeTimeout);
-  dodgeTimeout = setTimeout(() => dodgeToast.classList.remove('show'), 800);
+  dodgeTimeout = setTimeout(() => {
+    dodgeToast.classList.remove('show');
+    dodgeToast.classList.remove('toast-dodge', 'toast-block');
+  }, 850);
 }
 
 // ── Combo ──

@@ -4,6 +4,7 @@ import { ONE_SHOT, ATTACKS } from './combat.js';
 import { BLOCK_ANIM } from './classes.js';
 import { activeDifficulty } from './difficulty.js';
 import { getFloorY } from './scene.js';
+import { playAttackSwingSound } from './sfx.js';
 
 // Maps logical animation names → actual GLB clip names (Fantacode Melee Combat System)
 const ANIM_MAP = {
@@ -303,6 +304,10 @@ export class Player {
     if (ATTACKS[name]) {
       this.attackHitChecked = false;
       this.attackElapsed = 0;  // reset — ticked by update(dt)
+    }
+
+    if (ATTACKS[name] || name === 'Roll' || name === BLOCK_ANIM) {
+      playAttackSwingSound(name);
     }
 
     this.showToast(name);
