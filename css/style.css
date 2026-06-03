@@ -118,18 +118,37 @@ canvas { display: block; }
 #game-back:hover { border-color: #cc6040; color: #ffaa80; }
 #game-back:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
 
-#mobile-ui-toggle {
+#mobile-ui-toggle,
+#train-details-toggle {
   display: none;
   position: absolute; top: 10px; right: 10px;
   font-family: 'Press Start 2P', monospace;
   font-size: 7px; padding: 6px 10px;
-  background: #101025; color: #80ffcf; border: 2px solid #2f7a74;
   cursor: pointer; box-shadow: 2px 2px 0 #000;
   pointer-events: auto; z-index: 12;
   transition: opacity 0.15s step-end, transform 0.15s step-end;
 }
+#mobile-ui-toggle {
+  background: #101025; color: #80ffcf; border: 2px solid #2f7a74;
+}
 #mobile-ui-toggle:hover { border-color: #46a9a1; color: #b4fff0; }
 #mobile-ui-toggle:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
+#train-details-toggle {
+  background: #1a1810; color: #ffde75; border: 2px solid #8b6b28;
+}
+#train-details-toggle:hover { border-color: #c7a54e; color: #fff1b2; }
+#train-details-toggle:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
+body[data-mode="train"] #train-details-toggle {
+  display: block;
+}
+body[data-mode="train"] #mobile-ui-toggle {
+  display: none !important;
+}
+#ui.train-details-open #train-details-toggle {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-6px);
+}
 
 /* ── UI layer ── */
 #ui {
@@ -425,12 +444,69 @@ canvas { display: block; }
 }
 
 /* ── Training dashboard ── */
+#train-details-modal {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 12px;
+  background: rgba(6, 8, 18, 0.78);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s step-end, visibility 0.15s step-end;
+  z-index: 60;
+}
+#train-details-modal.show {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+#train-details-card {
+  width: min(430px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  background: rgba(12, 12, 32, 0.98);
+  border: 2px solid #2a2a50;
+  box-shadow: 4px 4px 0 #000;
+  overflow: hidden;
+  pointer-events: auto;
+}
+#train-details-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #ffde75;
+  font-size: 7px;
+  letter-spacing: 1px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid #1c1c34;
+}
+#train-details-close {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 5px 8px;
+  background: #101025;
+  color: #ff9a80;
+  border: 2px solid #804030;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #000;
+}
+#train-details-close:active {
+  transform: translate(1px,1px);
+  box-shadow: 1px 1px 0 #000;
+}
 #training-dash {
-  position: absolute; top: 80px; right: 8px;
+  position: relative;
   display: flex; flex-direction: column; gap: 6px;
-  pointer-events: auto; z-index: 50;
-  width: min(290px, calc(100vw - 16px));
-  max-height: calc(100dvh - 92px);
+  pointer-events: auto;
+  width: 100%;
+  max-height: calc(100dvh - 112px);
   overflow-y: auto;
   padding-right: 2px;
 }
@@ -965,15 +1041,6 @@ canvas { display: block; }
     letter-spacing: 4px;
   }
 
-  body[data-mode="train"] #info p,
-  body[data-mode="train"] #train-stats,
-  body[data-mode="train"] #train-graph,
-  body[data-mode="train"] #train-status,
-  body[data-mode="train"] #p1-panel,
-  body[data-mode="train"] #p2-panel {
-    display: none;
-  }
-
 }
 
 @media (max-width: 700px) {
@@ -1274,7 +1341,8 @@ canvas { display: block; }
 @media (max-height: 540px) {
   #arena-toggle,
   #game-back,
-  #mobile-ui-toggle {
+  #mobile-ui-toggle,
+  #train-details-toggle {
     top: 8px;
     font-size: 6px;
     padding: 5px 8px;
@@ -1291,6 +1359,12 @@ canvas { display: block; }
 
   #info h2 {
     font-size: 8px;
+  }
+
+  #train-details-card {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    padding: 10px;
   }
 
   #info p {

@@ -108,6 +108,9 @@ let gameMode = 'train'; // AI vs AI direct
 let ai1 = null, ai2 = null;
 const logger = new MatchLogger();
 const DEFAULT_TRAIN_SIM_SPEED = 0.85;
+const TRAIN_VISIBLE_START_DIST = 0.9;
+const TRAIN_VISIBLE_DECISION_INTERVAL = 0.1;
+const TRAIN_VISIBLE_ATTACK_PACE = 1.12;
 
 function getDefaultSimSpeed(mode) {
   return mode === 'train' ? DEFAULT_TRAIN_SIM_SPEED : 1;
@@ -307,7 +310,7 @@ async function initMatch() {
   // For first round, use gltfCache directly. For rematches, reload.
   // Start closer in training mode so fights happen immediately
   // Spawn near live contact range so the match starts as a fight, not a walk-in.
-  const startDist = gameMode === 'train' ? 0.8 : 0.95;
+  const startDist = gameMode === 'train' ? TRAIN_VISIBLE_START_DIST : 0.95;
 
   if (!player1) {
     player1 = new Player('p1', -startDist, p1Def, document.getElementById('p1-toast'));
@@ -376,6 +379,10 @@ async function initMatch() {
       ai2.combatActions = p2Actions.filter(a => a.category === 'combat');
       ai2.reset();
     }
+    ai1.decisionInterval = TRAIN_VISIBLE_DECISION_INTERVAL;
+    ai2.decisionInterval = TRAIN_VISIBLE_DECISION_INTERVAL;
+    ai1.attackPaceMultiplier = TRAIN_VISIBLE_ATTACK_PACE;
+    ai2.attackPaceMultiplier = TRAIN_VISIBLE_ATTACK_PACE;
   } else if (gameMode === '1p') {
     ai2 = new AIController(player2, player1, p2Actions, true);
     ai1 = null;
@@ -412,8 +419,8 @@ async function initMatch() {
   UI.resetHealthBarColors();
 
   // Show training dashboard
+  UI.showTrainingDashboard(gameMode === 'train');
   if (gameMode === 'train') {
-    UI.showTrainingDashboard(true);
     UI.updateSpeedDisplay(simSpeed);
   }
 }
@@ -795,7 +802,7 @@ function goHome() {
   autoRestart = false;
   delete document.body.dataset.mode;
   setAudioScene('menu');
-  UI.resetMobileFightUi();
+  UI.resetFightOverlays();
   document.getElementById('ui').style.display = 'none';
   UI.showTrainingDashboard(false);
   UI.hideKO();

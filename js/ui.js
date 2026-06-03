@@ -8,8 +8,12 @@ const uiRoot      = document.getElementById('ui');
 const fightAuxUi  = document.getElementById('fight-aux-ui');
 const mobileUiToggle = document.getElementById('mobile-ui-toggle');
 const mobileUiClose  = document.getElementById('mobile-ui-close');
+const trainDetailsToggle = document.getElementById('train-details-toggle');
+const trainDetailsModal = document.getElementById('train-details-modal');
+const trainDetailsClose = document.getElementById('train-details-close');
 let dodgeTimeout  = null;
 let mobileUiBound = false;
+let trainDetailsBound = false;
 
 function isCompactFightUi() {
   return window.matchMedia('(hover: none) and (pointer: coarse)').matches
@@ -19,6 +23,7 @@ function isCompactFightUi() {
 export function setMobileFightUiOpen(open) {
   if (!uiRoot) return;
   const shouldOpen = !!open && isCompactFightUi();
+  if (shouldOpen) setTrainDetailsOpen(false);
   uiRoot.classList.toggle('mobile-ui-open', shouldOpen);
   if (fightAuxUi) fightAuxUi.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
   if (mobileUiToggle) mobileUiToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
@@ -26,6 +31,21 @@ export function setMobileFightUiOpen(open) {
 
 export function resetMobileFightUi() {
   setMobileFightUiOpen(false);
+}
+
+export function setTrainDetailsOpen(open) {
+  if (!uiRoot || !trainDetailsModal) return;
+  const shouldOpen = !!open && document.body.dataset.mode === 'train';
+  if (shouldOpen) setMobileFightUiOpen(false);
+  uiRoot.classList.toggle('train-details-open', shouldOpen);
+  trainDetailsModal.classList.toggle('show', shouldOpen);
+  trainDetailsModal.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+  if (trainDetailsToggle) trainDetailsToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+}
+
+export function resetFightOverlays() {
+  setMobileFightUiOpen(false);
+  setTrainDetailsOpen(false);
 }
 
 export function initMobileFightUi() {
@@ -41,6 +61,31 @@ export function initMobileFightUi() {
   }, { passive: true });
 
   setMobileFightUiOpen(false);
+}
+
+export function initTrainDetailsUi() {
+  if (trainDetailsBound) return;
+  trainDetailsBound = true;
+
+  trainDetailsToggle?.addEventListener('click', () => setTrainDetailsOpen(true));
+  trainDetailsClose?.addEventListener('click', () => setTrainDetailsOpen(false));
+  trainDetailsModal?.addEventListener('click', (event) => {
+    if (event.target === trainDetailsModal) setTrainDetailsOpen(false);
+  });
+
+  window.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      setTrainDetailsOpen(false);
+      setMobileFightUiOpen(false);
+    }
+  });
+
+  window.addEventListener('orientationchange', () => setTrainDetailsOpen(false));
+  window.addEventListener('resize', () => {
+    if (document.body.dataset.mode !== 'train') setTrainDetailsOpen(false);
+  }, { passive: true });
+
+  setTrainDetailsOpen(false);
 }
 
 // ── Health bars ──
@@ -122,7 +167,7 @@ export function updateProximity(dist) {
 // ── KO ──
 
 export function showKO(winner, loser, gameMode, autoContinueSeconds = 0) {
-  setMobileFightUiOpen(false);
+  resetFightOverlays();
   const winnerName = winner.id === 'p1' ? 'Player 1' : 'Player 2';
   const loserName = loser.id === 'p1' ? 'Player 1' : 'Player 2';
   document.getElementById('ko-winner').textContent = `${winnerName} ${winner.classDef.name.toUpperCase()} WINS`;
@@ -216,7 +261,8 @@ export function hideLoading() {
 
 export function showGameUI() {
   initMobileFightUi();
-  resetMobileFightUi();
+  initTrainDetailsUi();
+  resetFightOverlays();
   document.getElementById('ui').style.display = 'block';
 }
 
@@ -472,6 +518,7 @@ let graphCtx = null;
 export function showTrainingDashboard(show) {
   const dash = document.getElementById('training-dash');
   if (dash) dash.style.display = show ? 'flex' : 'none';
+  if (!show) setTrainDetailsOpen(false);
   if (show && !graphCanvas) {
     graphCanvas = document.getElementById('train-graph');
     if (graphCanvas) graphCtx = graphCanvas.getContext('2d');

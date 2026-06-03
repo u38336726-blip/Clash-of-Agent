@@ -8,9 +8,24 @@ initBrainCombatRef(ATTACKS);
 
 const DEFAULT_FIGHT_DISTANCE = 1.56; // matches PLAYER_COLLISION_DIST — fighters stand at contact range
 const DISTANCE_TOLERANCE = 0.25;    // wide enough to fire at collision boundary for all idealDist values
+const ATTACK_COOLDOWN_BY_TYPE = {
+  melee: 0.34,
+  kick: 0.44,
+};
+const EXTRA_HEAVY_ATTACK_DELAY = new Set(['Elbow', 'Counter', 'Uppercut', 'Uppercut_Combo']);
 
 function getIdealAttackDistance(animName) {
   return ATTACKS[animName]?.idealDist ?? DEFAULT_FIGHT_DISTANCE;
+}
+
+function getAttackCooldown(animName, paceMultiplier = 1) {
+  const atk = ATTACKS[animName];
+  if (!atk) return (0.34 + Math.random() * 0.08) * paceMultiplier;
+
+  let cooldown = ATTACK_COOLDOWN_BY_TYPE[atk.type] ?? 0.34;
+  if ((atk.damage ?? 0) >= 18) cooldown += 0.04;
+  if (EXTRA_HEAVY_ATTACK_DELAY.has(animName)) cooldown += 0.04;
+  return (cooldown + Math.random() * 0.08) * paceMultiplier;
 }
 
 /**
@@ -28,6 +43,7 @@ export class AIController {
     this.decisionTimer = 0;
     this.decisionInterval = activeDifficulty.aiDecisionSpeed;
     this.attackCooldown = 0;
+    this.attackPaceMultiplier = 1;
     this.isSprinting = false;
     this.moveForward = 0; // 1=toward opp, -1=away, 0=stand
     this.currentMoveAnim = null;
@@ -144,9 +160,7 @@ export class AIController {
         this.moveForward = 0;
         this.isSprinting = false;
         if (this.pendingAttack && this.attackCooldown <= 0) {
-          p.play(this.pendingAttack.anim, 0.05);
-          this._logAction(this.pendingAttack.anim);
-          this.attackCooldown = 0.28 + Math.random() * 0.18;
+          this._playAttack(this.pendingAttack.anim);
           this.pendingAttack = null;
         }
       }
@@ -253,9 +267,7 @@ export class AIController {
 
     if (distance <= ideal + DISTANCE_TOLERANCE) {
       // Close enough already — don't force a fake step back before striking.
-      this.player.play(atk.anim, 0.05);
-      this._logAction(atk.anim);
-      this.attackCooldown = 0.28 + Math.random() * 0.18;
+      this._playAttack(atk.anim);
     } else {
       // Not at ideal distance yet — queue it, movement walks to correct range first
       this.pendingAttack = atk;
@@ -293,9 +305,7 @@ export class AIController {
           this.player.model.position.distanceTo(this.opponent.model.position) <= queuedAtk.range;
 
         if (canCommitQueued && this.attackCooldown <= 0) {
-          p.play(this.pendingAttack.anim, 0.05);
-          this._logAction(this.pendingAttack.anim);
-          this.attackCooldown = 0.28 + Math.random() * 0.18;
+          this._playAttack(this.pendingAttack.anim);
           this.pendingAttack = null;
         } else if (this.attackCooldown <= 0) {
           this._tryAttackAtDistance(this.player.model.position.distanceTo(this.opponent.model.position));
@@ -343,6 +353,12 @@ export class AIController {
 
   _logAction(animName) {
     if (this.onAction) this.onAction(this.player.id, animName);
+  }
+
+  _playAttack(animName) {
+    this.player.play(animName, 0.05);
+    this._logAction(animName);
+    this.attackCooldown = getAttackCooldown(animName, this.attackPaceMultiplier);
   }
 
   reset() {

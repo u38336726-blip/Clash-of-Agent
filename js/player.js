@@ -352,10 +352,10 @@ export class Player {
 
     // Per-animation speed — makes punches snappy and sprint visually distinct
     const ANIM_SPEED = {
-      'Jab': 1.4, 'Hook': 1.25, 'Hook_Right': 1.25, 'Cross': 1.3,
-      'Uppercut': 1.2, 'Uppercut_Combo': 1.15, 'Body_Punch': 1.25, 'Body_Punch_L': 1.25,
-      'Kick_Front': 1.08, 'Kick_Round': 1.02, 'Kick_MMA': 0.98, 'Kick_Side': 1.05,
-      'Elbow': 1.45, 'Counter': 1.2, 'Roll': 1.35,
+      'Jab': 1.28, 'Hook': 1.16, 'Hook_Right': 1.16, 'Cross': 1.2,
+      'Uppercut': 1.12, 'Uppercut_Combo': 1.08, 'Body_Punch': 1.16, 'Body_Punch_L': 1.16,
+      'Kick_Front': 1.02, 'Kick_Round': 0.98, 'Kick_MMA': 0.95, 'Kick_Side': 1.0,
+      'Elbow': 1.22, 'Counter': 1.12, 'Roll': 1.35,
       'Walk_Loop': 1.15, 'Walk_Back_Loop': 1.0,
       'Sprint_Loop': 1.65,
     };
