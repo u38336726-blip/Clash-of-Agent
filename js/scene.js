@@ -94,6 +94,10 @@ let arenaModel = null;
 let arenaReady = false;
 let arenaTargetY = 0;     // final resting Y position
 let arenaAnimation = null; // active transition state
+let resolveArenaReady = null;
+const arenaReadyPromise = new Promise(resolve => {
+  resolveArenaReady = resolve;
+});
 
 const arenaLoader = new GLTFLoader();
 console.log('Loading arena from assets/arena.glb...');
@@ -140,9 +144,13 @@ arenaLoader.load('assets/arena.glb', (gltf) => {
   scene.add(arena);
   arenaModel = arena;
   arenaReady = true;
+  resolveArenaReady?.(true);
+  resolveArenaReady = null;
   console.log(`Arena ready (hidden). Scale=${scale.toFixed(3)}`);
 }, undefined, (err) => {
   console.warn('Arena load failed, using fallback ground:', err);
+  resolveArenaReady?.(false);
+  resolveArenaReady = null;
   addFallbackGround();
 });
 
@@ -185,6 +193,31 @@ let arenaMeshes = [];      // all meshes in the arena, sorted randomly
 let arenaVisible = false;
 let morphAnim = null;       // { startTime, duration, direction: 'in'|'out' }
 
+function ensureArenaMeshes() {
+  if (!arenaModel || arenaMeshes.length > 0) return;
+  arenaModel.traverse(child => {
+    if (child.isMesh) {
+      arenaMeshes.push(child);
+    }
+  });
+  for (let i = arenaMeshes.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arenaMeshes[i], arenaMeshes[j]] = [arenaMeshes[j], arenaMeshes[i]];
+  }
+}
+
+function setArenaMeshState(opacity, transparent) {
+  ensureArenaMeshes();
+  for (const mesh of arenaMeshes) {
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    mats.forEach(m => {
+      m.transparent = transparent;
+      m.opacity = opacity;
+      m.needsUpdate = true;
+    });
+  }
+}
+
 /**
  * Toggle arena visibility with a morph transition.
  * Pieces fade in/out staggered — some appear early, some late.
@@ -207,18 +240,7 @@ export function toggleArena(duration = 3.0) {
   };
 
   // On first reveal, collect and shuffle meshes for staggered effect
-  if (arenaMeshes.length === 0) {
-    arenaModel.traverse(child => {
-      if (child.isMesh) {
-        arenaMeshes.push(child);
-      }
-    });
-    // Shuffle so pieces appear in random order
-    for (let i = arenaMeshes.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [arenaMeshes[i], arenaMeshes[j]] = [arenaMeshes[j], arenaMeshes[i]];
-    }
-  }
+  ensureArenaMeshes();
 }
 
 /** Call every frame */
@@ -278,6 +300,16 @@ export function updateArenaTransition() {
 export function isArenaVisible() { return arenaVisible; }
 export function getFloorY() { return arenaVisible ? 1.09 : 0; }
 export function isArenaReady() { return arenaReady; }
+export function waitForArenaReady() { return arenaReadyPromise; }
+export function showArenaImmediate() {
+  if (!arenaReady || !arenaModel) return false;
+  morphAnim = null;
+  arenaVisible = true;
+  arenaModel.position.y = arenaTargetY;
+  setDefaultGroundVisible(false);
+  setArenaMeshState(1, false);
+  return true;
+}
 
 // --- Arena floor markings (centre circle + cross) ---
 const markMat = new THREE.MeshBasicMaterial({ color: 0x8a6a3a, side: THREE.DoubleSide, transparent: true, opacity: 0.55 });

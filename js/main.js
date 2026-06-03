@@ -1,6 +1,19 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { scene, camera, renderer, orbitControls, clock, toggleArena, updateArenaTransition, isArenaReady, isArenaVisible, updateCameraForFight } from './scene.js';
+import {
+  scene,
+  camera,
+  renderer,
+  orbitControls,
+  clock,
+  toggleArena,
+  updateArenaTransition,
+  isArenaReady,
+  isArenaVisible,
+  waitForArenaReady,
+  showArenaImmediate,
+  updateCameraForFight,
+} from './scene.js';
 
 // ── Wrist debug spheres (toggle with D key) ──
 let showBoneDebug = false;
@@ -111,6 +124,8 @@ const DEFAULT_TRAIN_SIM_SPEED = 0.85;
 const TRAIN_VISIBLE_START_DIST = 0.9;
 const TRAIN_VISIBLE_DECISION_INTERVAL = 0.1;
 const TRAIN_VISIBLE_ATTACK_PACE = 1.12;
+const TRAIN_VISIBLE_MIN_EPSILON = 0.1;
+const MATCH_LOADING_TEXT = 'Preparing arena...';
 
 function getDefaultSimSpeed(mode) {
   return mode === 'train' ? DEFAULT_TRAIN_SIM_SPEED : 1;
@@ -127,6 +142,8 @@ let p2ClassId = 'mma';     // P2 class
 let ghostsPerRound = 0;
 let koRevealTimer = null;
 let koAutoTimer = null;
+let matchReady = false;
+let tickParity = 0;
 
 window.addEventListener('pointerdown', unlockAudio, { passive: true });
 window.addEventListener('keydown', unlockAudio);
@@ -147,6 +164,16 @@ document.addEventListener('click', (event) => {
 
   playUiSelectSound(kind);
 }, true);
+
+function setMatchLoading(visible, text = MATCH_LOADING_TEXT) {
+  const loadingEl = document.getElementById('loading');
+  if (!loadingEl) return;
+  loadingEl.style.display = visible ? 'flex' : 'none';
+  const labelNode = Array.from(loadingEl.childNodes).find(node => node.nodeType === Node.TEXT_NODE);
+  if (labelNode) {
+    labelNode.textContent = visible ? ` ${text}` : labelNode.textContent;
+  }
+}
 
 // ── Boot ──
 
@@ -200,14 +227,14 @@ async function boot() {
     p2ClassId = 'mma';
     setDifficulty('hard');
     initBoneDebug();
-    initMatch();
+    await initMatch();
     animate();
     return;
   }
 
   // For 1p/2p: go through class select
   await menuLoop();
-  initMatch();
+  await initMatch();
   animate();
 }
 
@@ -302,9 +329,18 @@ async function menuLoop() {
 }
 
 async function initMatch() {
+  matchReady = false;
   const p1Def = CLASS_DEFS[p1ClassId];
   const p2Def = CLASS_DEFS[p2ClassId];
   const sceneName = gameMode === 'train' ? 'train' : 'fight';
+
+  if (!isArenaVisible()) {
+    if (!isArenaReady()) setMatchLoading(true);
+    const arenaLoaded = isArenaReady() ? true : await waitForArenaReady();
+    if (arenaLoaded) {
+      showArenaImmediate();
+    }
+  }
 
   // Re-create players each round (reload model from cached gltf)
   // For first round, use gltfCache directly. For rematches, reload.
@@ -336,11 +372,9 @@ async function initMatch() {
   const showP1Panel = gameMode !== 'train';
   const showP2Panel = gameMode === '2p';
 
-  UI.showGameUI();
   setAudioScene(sceneName);
   playRoundStartSound(sceneName);
-  // Auto-reveal arena on match start
-  if (isArenaReady() && !isArenaVisible()) toggleArena(3.0);
+  UI.showGameUI();
   UI.buildPanel('p1-panel', p1Actions, player1, 'active-p1');
   UI.buildPanel('p2-panel', p2Actions, player2, 'active-p2');
   UI.setPanelVisibility('p1-panel', showP1Panel);
@@ -383,6 +417,8 @@ async function initMatch() {
     ai2.decisionInterval = TRAIN_VISIBLE_DECISION_INTERVAL;
     ai1.attackPaceMultiplier = TRAIN_VISIBLE_ATTACK_PACE;
     ai2.attackPaceMultiplier = TRAIN_VISIBLE_ATTACK_PACE;
+    if (ai1.brain) ai1.brain.epsilon = Math.max(ai1.brain.epsilon, TRAIN_VISIBLE_MIN_EPSILON);
+    if (ai2.brain) ai2.brain.epsilon = Math.max(ai2.brain.epsilon, TRAIN_VISIBLE_MIN_EPSILON);
   } else if (gameMode === '1p') {
     ai2 = new AIController(player2, player1, p2Actions, true);
     ai1 = null;
@@ -423,6 +459,10 @@ async function initMatch() {
   if (gameMode === 'train') {
     UI.updateSpeedDisplay(simSpeed);
   }
+
+  setMatchLoading(false);
+  tickParity = 0;
+  matchReady = true;
 }
 
 // ── KO handler ──
@@ -475,7 +515,7 @@ function handleKO(winner, loser) {
   }
 
   // Slow motion on KO moment so the death animation reads clearly.
-  shakeIntensity = 0.15;
+  shakeIntensity = 0.07;
   if (player1.mixer) player1.mixer.timeScale = 0.35;
   if (player2.mixer) player2.mixer.timeScale = 0.35;
 
@@ -494,7 +534,7 @@ function handleKO(winner, loser) {
 
   if (autoContinueSeconds > 0) {
     koAutoTimer = setTimeout(() => {
-      startNextRound();
+      void startNextRound();
     }, revealDelay + autoContinueSeconds * 1000);
   }
 }
@@ -522,7 +562,7 @@ function resolveHit(attacker, victim) {
     playBlockSound();
     victim.takeDamage(result.damage, result.reaction, true, attacker);
     UI.updateHealthBar(victim);
-    shakeIntensity = 0.02;
+    shakeIntensity = 0.008;
     if (attackerAI) attackerAI.reward(-1);   // blocked
     if (victimAI)   victimAI.reward(-1);     // blocked = you're not dealing damage either, slight negative
     logger.logEvent({ event: 'block', attacker: attacker.id, action: attacker.currentAnimName, damage: result.damage, result: 'blocked' }, state);
@@ -536,7 +576,7 @@ function resolveHit(attacker, victim) {
   UI.flashHit(victim.id);
   UI.showCombo(attacker);
   UI.updateHealthBar(victim);
-  shakeIntensity = Math.min(0.3, result.damage * 0.016);
+  shakeIntensity = Math.min(0.1, result.damage * 0.007);
   spawnHitFlash(victim.getBodyPos());
   if (attackerAI) attackerAI.reward(result.damage * 0.5);  // reward proportional to damage
   if (victimAI)   victimAI.reward(-result.damage * 0.3);   // punish for taking hit
@@ -642,7 +682,7 @@ window._resetBrain2 = function() {
 // ── Manual KO handlers ──
 
 document.getElementById('ko-restart')?.addEventListener('click', () => {
-  startNextRound();
+  void startNextRound();
 });
 
 document.getElementById('ko-home')?.addEventListener('click', () => {
@@ -674,12 +714,17 @@ window._setHyper = function(on) {
 
 function gameTick(dt) {
   logger.frameCount++;
-  if (!player1 || !player2) return;
+  if (!player1 || !player2 || !matchReady) return;
 
   if (!koHandled) {
     processMovement(dt, player1, player2);
-    if (ai1) ai1.update(dt);
-    if (ai2) ai2.update(dt);
+    if (tickParity === 0) {
+      if (ai1) ai1.update(dt);
+      if (ai2) ai2.update(dt);
+    } else {
+      if (ai2) ai2.update(dt);
+      if (ai1) ai1.update(dt);
+    }
 
     if (player1.model && player2.model) {
       player1.faceTarget(player2.model.position);
@@ -696,10 +741,17 @@ function gameTick(dt) {
   }
 
   if (player1.model && player2.model && !koHandled) {
-    resolveHit(player1, player2);
-    resolveHit(player2, player1);
+    if (tickParity === 0) {
+      resolveHit(player1, player2);
+      resolveHit(player2, player1);
+    } else {
+      resolveHit(player2, player1);
+      resolveHit(player1, player2);
+    }
     player1.pushApart(player2);
   }
+
+  tickParity = tickParity === 0 ? 1 : 0;
 }
 
 // Hyper mode: run game logic in tight loop using setTimeout(0),
@@ -765,7 +817,7 @@ function animate() {
     camera.position.x += (Math.random() - 0.5) * shakeIntensity;
     camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.5;
     camera.position.z += (Math.random() - 0.5) * shakeIntensity * 0.25;
-    shakeIntensity *= 0.78;
+    shakeIntensity *= 0.62;
   }
 
   updateArenaTransition();
@@ -787,17 +839,18 @@ function removePlayersFromScene() {
   if (player2?.model) scene.remove(player2.model);
 }
 
-function startNextRound() {
+async function startNextRound() {
   clearKOTimers();
   UI.hideKO();
   koHandled = false;
-  initMatch();
+  await initMatch();
   if (hyperMode) runHyperLoop();
 }
 
 function goHome() {
   clearKOTimers();
   koHandled = true;
+  matchReady = false;
   hyperMode = false;
   autoRestart = false;
   delete document.body.dataset.mode;
@@ -813,9 +866,9 @@ function goHome() {
   ai2 = null;
   roundCount = 0;
   ghostRounds = 0;
-  menuLoop().then(() => {
+  menuLoop().then(async () => {
     autoRestart = false;
     koHandled = false;
-    initMatch();
+    await initMatch();
   });
 }

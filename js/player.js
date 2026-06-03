@@ -48,6 +48,9 @@ const PLAYER_COLLISION_DIST = 1.56;
 const PLAYER_ATTACK_SEPARATION_DIST = 1.56;
 const PLAYER_BODY_COLLISION_DIST = 0.84;
 const PLAYER_ATTACK_BODY_SEPARATION_DIST = 0.78;
+const FACE_TURN_DEADZONE = 0.03;
+const PUSH_APART_SLOP = 0.035;
+const PUSH_APART_STRENGTH = 0.38;
 const ROOT_MOTION_TRACK_SUFFIXES = ['.position', '.translation'];
 const ROOT_MOTION_RULES = [
   { pattern: 'soldier_team3_unlit', axes: 'xyz' },
@@ -413,9 +416,12 @@ export class Player {
       let diff = angle - this.model.rotation.y;
       while (diff > Math.PI) diff -= Math.PI * 2;
       while (diff < -Math.PI) diff += Math.PI * 2;
+      if (Math.abs(diff) <= FACE_TURN_DEADZONE) return;
+      const closeRange = dir.length() < 1.9;
       // Clamp max rotation per frame to prevent spinning
-      const maxRot = 0.18;
-      this.model.rotation.y += Math.max(-maxRot, Math.min(maxRot, diff * 0.22));
+      const maxRot = closeRange ? 0.11 : 0.18;
+      const turnStrength = closeRange ? 0.16 : 0.22;
+      this.model.rotation.y += Math.max(-maxRot, Math.min(maxRot, diff * turnStrength));
     }
   }
 
@@ -597,7 +603,7 @@ export class Player {
       0
     );
 
-    if (overlap > 0) {
+    if (overlap > PUSH_APART_SLOP) {
       const diff = separation.bodyDiff.lengthSq() > 0.0001
         ? separation.bodyDiff
         : separation.rootDiff;
@@ -608,7 +614,7 @@ export class Player {
           Math.cos(this.model.rotation.y) || 0
         );
       }
-      const push = diff.normalize().multiplyScalar((overlap + 0.02) * 0.5);
+      const push = diff.normalize().multiplyScalar((overlap - PUSH_APART_SLOP + 0.01) * PUSH_APART_STRENGTH);
       this.model.position.add(push);
       other.model.position.sub(push);
     }

@@ -25,8 +25,18 @@ export const ATTACKS = {
   'Counter':       { damage: 20, range: 1.82, idealDist: 1.5,  hitTime: 0.25, hitWindow: 0.14, contactRadius: 0.62, forwardDot: 0.04, reaction: 'Hit_Heavy', type: 'melee' },
 };
 
-const CONTACT_RADIUS_SLACK = 0.18;
-const IDEAL_RANGE_SLACK = 0.22; // must cover gap between idealDist and PLAYER_COLLISION_DIST (1.56)
+const CONTACT_RADIUS_SLACK_BY_TYPE = {
+  melee: 0.26,
+  kick: 0.18,
+};
+const IDEAL_RANGE_SLACK_BY_TYPE = {
+  melee: 0.3,
+  kick: 0.22,
+};
+const FACING_SLACK_BY_TYPE = {
+  melee: 0.08,
+  kick: 0.03,
+};
 
 function isAttackActive(attacker, atk) {
   if (attacker.attackElapsed < atk.hitTime) return false;
@@ -37,7 +47,7 @@ function isAttackActive(attacker, atk) {
   return true;
 }
 
-function isFacingVictim(attacker, victim, minDot) {
+function isFacingVictim(attacker, victim, atk) {
   const toVictimX = victim.model.position.x - attacker.model.position.x;
   const toVictimZ = victim.model.position.z - attacker.model.position.z;
   const planarLen = Math.hypot(toVictimX, toVictimZ);
@@ -46,21 +56,25 @@ function isFacingVictim(attacker, victim, minDot) {
   const forwardX = Math.sin(attacker.model.rotation.y);
   const forwardZ = Math.cos(attacker.model.rotation.y);
   const dot = (toVictimX / planarLen) * forwardX + (toVictimZ / planarLen) * forwardZ;
-  return dot >= minDot;
+  const baseMinDot = atk.forwardDot ?? 0;
+  const facingSlack = FACING_SLACK_BY_TYPE[atk.type] ?? 0.03;
+  return dot >= baseMinDot - facingSlack;
 }
 
 function hasVisibleContact(attacker, victim, atk, centerDist) {
   const contactPos = attacker.getAttackContactPos?.() ?? attacker.getAttackHandPos?.();
   const bodyPos = victim.getBodyPos?.();
-  const idealRange = Math.min(atk.range, (atk.idealDist ?? atk.range) + IDEAL_RANGE_SLACK);
+  const contactSlack = CONTACT_RADIUS_SLACK_BY_TYPE[atk.type] ?? 0.18;
+  const idealRangeSlack = IDEAL_RANGE_SLACK_BY_TYPE[atk.type] ?? 0.22;
+  const idealRange = Math.min(atk.range, (atk.idealDist ?? atk.range) + idealRangeSlack);
   if (!contactPos || !bodyPos) {
     return centerDist <= idealRange;
   }
   const contactDist = contactPos.distanceTo(bodyPos);
-  if (contactDist <= atk.contactRadius + CONTACT_RADIUS_SLACK) {
+  if (contactDist <= atk.contactRadius + contactSlack) {
     return true;
   }
-  return centerDist <= idealRange && contactDist <= atk.contactRadius + CONTACT_RADIUS_SLACK * 1.8;
+  return centerDist <= idealRange && contactDist <= atk.contactRadius + contactSlack * 1.8;
 }
 
 export function checkAttackHit(attacker, victim) {
@@ -75,7 +89,7 @@ export function checkAttackHit(attacker, victim) {
   if (centerDist > atk.range) return null;
 
   if (victim.currentAnimName === 'Roll') return null;
-  if (!isFacingVictim(attacker, victim, atk.forwardDot ?? 0)) return null;
+  if (!isFacingVictim(attacker, victim, atk)) return null;
   if (!hasVisibleContact(attacker, victim, atk, centerDist)) return null;
 
   attacker.attackHitChecked = true;
