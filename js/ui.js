@@ -4,7 +4,44 @@ import { CLASS_DEFS } from './classes.js';
 const hitFlash    = document.getElementById('hit-flash');
 const proximityEl = document.getElementById('proximity');
 const dodgeToast  = document.getElementById('dodge-toast');
+const uiRoot      = document.getElementById('ui');
+const fightAuxUi  = document.getElementById('fight-aux-ui');
+const mobileUiToggle = document.getElementById('mobile-ui-toggle');
+const mobileUiClose  = document.getElementById('mobile-ui-close');
 let dodgeTimeout  = null;
+let mobileUiBound = false;
+
+function isCompactFightUi() {
+  return window.matchMedia('(hover: none) and (pointer: coarse)').matches
+    && (window.innerWidth <= 900 || window.innerHeight <= 540);
+}
+
+export function setMobileFightUiOpen(open) {
+  if (!uiRoot) return;
+  const shouldOpen = !!open && isCompactFightUi();
+  uiRoot.classList.toggle('mobile-ui-open', shouldOpen);
+  if (fightAuxUi) fightAuxUi.setAttribute('aria-hidden', shouldOpen ? 'false' : 'true');
+  if (mobileUiToggle) mobileUiToggle.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+}
+
+export function resetMobileFightUi() {
+  setMobileFightUiOpen(false);
+}
+
+export function initMobileFightUi() {
+  if (mobileUiBound) return;
+  mobileUiBound = true;
+
+  mobileUiToggle?.addEventListener('click', () => setMobileFightUiOpen(true));
+  mobileUiClose?.addEventListener('click', () => setMobileFightUiOpen(false));
+
+  window.addEventListener('orientationchange', () => setMobileFightUiOpen(false));
+  window.addEventListener('resize', () => {
+    if (!isCompactFightUi()) setMobileFightUiOpen(false);
+  }, { passive: true });
+
+  setMobileFightUiOpen(false);
+}
 
 // ── Health bars ──
 
@@ -85,6 +122,7 @@ export function updateProximity(dist) {
 // ── KO ──
 
 export function showKO(winner, loser, gameMode, autoContinueSeconds = 0) {
+  setMobileFightUiOpen(false);
   const winnerName = winner.id === 'p1' ? 'Player 1' : 'Player 2';
   const loserName = loser.id === 'p1' ? 'Player 1' : 'Player 2';
   document.getElementById('ko-winner').textContent = `${winnerName} ${winner.classDef.name.toUpperCase()} WINS`;
@@ -150,6 +188,16 @@ export function buildPanel(panelId, actions, player, activeClass) {
   });
 }
 
+export function setPanelVisibility(panelId, visible) {
+  const panel = document.getElementById(panelId);
+  if (!panel) return;
+  if (!visible) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = '';
+}
+
 export function setActiveBtn(playerId, key, activeClass) {
   document.querySelectorAll(`.key-btn[data-player="${playerId}"]`).forEach(b => {
     b.classList.remove('active-p1', 'active-p2');
@@ -167,6 +215,8 @@ export function hideLoading() {
 }
 
 export function showGameUI() {
+  initMobileFightUi();
+  resetMobileFightUi();
   document.getElementById('ui').style.display = 'block';
 }
 

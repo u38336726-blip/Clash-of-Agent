@@ -122,6 +122,56 @@
       padding: 7px 10px;
     }
   }
+
+  @media (max-height: 540px) {
+    body {
+      flex-direction: column;
+    }
+
+    #viewport {
+      min-height: 48dvh;
+    }
+
+    #sidebar {
+      width: 100%;
+      min-width: 0;
+      max-height: 52dvh;
+      border-left: 0;
+      border-top: 1px solid #222;
+    }
+
+    #anim-label {
+      bottom: 10px;
+      font-size: 14px;
+      letter-spacing: 1px;
+      width: calc(100% - 20px);
+      text-align: center;
+    }
+
+    #sidebar-header {
+      padding: 9px 12px;
+    }
+
+    #sidebar-header h2 {
+      font-size: 11px;
+    }
+
+    .cat-label {
+      font-size: 8px;
+      margin-bottom: 3px;
+    }
+
+    .anim-btn {
+      font-size: 10px;
+      padding: 6px 8px;
+    }
+
+    #status {
+      font-size: 9px;
+      min-height: 26px;
+      padding: 6px 10px;
+    }
+  }
 </style>
 </head>
 <body>

@@ -330,6 +330,8 @@ async function initMatch() {
 
   const p1Actions = getClassActions(p1ClassId, 'p1');
   const p2Actions = getClassActions(p2ClassId, 'p2');
+  const showP1Panel = gameMode !== 'train';
+  const showP2Panel = gameMode === '2p';
 
   UI.showGameUI();
   setAudioScene(sceneName);
@@ -338,6 +340,8 @@ async function initMatch() {
   if (isArenaReady() && !isArenaVisible()) toggleArena(3.0);
   UI.buildPanel('p1-panel', p1Actions, player1, 'active-p1');
   UI.buildPanel('p2-panel', p2Actions, player2, 'active-p2');
+  UI.setPanelVisibility('p1-panel', showP1Panel);
+  UI.setPanelVisibility('p2-panel', showP2Panel);
   UI.updateHealthBar(player1);
   UI.updateHealthBar(player2);
 
@@ -791,6 +795,7 @@ function goHome() {
   autoRestart = false;
   delete document.body.dataset.mode;
   setAudioScene('menu');
+  UI.resetMobileFightUi();
   document.getElementById('ui').style.display = 'none';
   UI.showTrainingDashboard(false);
   UI.hideKO();

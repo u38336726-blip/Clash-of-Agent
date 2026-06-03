@@ -118,6 +118,19 @@ canvas { display: block; }
 #game-back:hover { border-color: #cc6040; color: #ffaa80; }
 #game-back:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
 
+#mobile-ui-toggle {
+  display: none;
+  position: absolute; top: 10px; right: 10px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px; padding: 6px 10px;
+  background: #101025; color: #80ffcf; border: 2px solid #2f7a74;
+  cursor: pointer; box-shadow: 2px 2px 0 #000;
+  pointer-events: auto; z-index: 12;
+  transition: opacity 0.15s step-end, transform 0.15s step-end;
+}
+#mobile-ui-toggle:hover { border-color: #46a9a1; color: #b4fff0; }
+#mobile-ui-toggle:active { transform: translate(1px,1px); box-shadow: 1px 1px 0 #000; }
+
 /* ── UI layer ── */
 #ui {
   position: absolute; top: 0; left: 0; width: 100%; height: 100%;
@@ -345,6 +358,25 @@ canvas { display: block; }
 .anim-toast.show { opacity: 1; }
 #p1-toast { left: 20px; color: #4090ff; }
 #p2-toast { right: 20px; color: #ff5050; }
+
+#fight-aux-head {
+  display: none;
+}
+
+#mobile-ui-close {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 10px;
+  padding: 5px 8px;
+  background: #201018;
+  color: #ffb4b4;
+  border: 2px solid #904050;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #000;
+}
+#mobile-ui-close:active {
+  transform: translate(1px,1px);
+  box-shadow: 1px 1px 0 #000;
+}
 
 /* ── Mode select ── */
 #mode-select {
@@ -1103,5 +1135,252 @@ canvas { display: block; }
   #p1-panel,
   #p2-panel {
     width: calc(50vw - 10px);
+  }
+}
+
+@media (hover: none) and (pointer: coarse) and (max-width: 900px),
+       (hover: none) and (pointer: coarse) and (max-height: 540px) {
+  #mobile-ui-toggle {
+    display: block;
+  }
+
+  #ui.mobile-ui-open #mobile-ui-toggle {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-6px);
+  }
+
+  #fight-aux-ui {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    top: 40px;
+    bottom: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    background: rgba(8, 10, 24, 0.95);
+    border: 2px solid #2a2a50;
+    box-shadow: 4px 4px 0 #000;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(8px);
+    pointer-events: none;
+    transition: opacity 0.15s step-end, transform 0.15s step-end, visibility 0.15s step-end;
+    z-index: 55;
+  }
+
+  #fight-aux-ui::-webkit-scrollbar {
+    width: 4px;
+  }
+
+  #fight-aux-ui::-webkit-scrollbar-thumb {
+    background: #2a2a50;
+  }
+
+  #fight-aux-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    color: #80ffcf;
+    font-size: 7px;
+    letter-spacing: 1px;
+    padding-bottom: 6px;
+    border-bottom: 2px solid #1c1c34;
+  }
+
+  #ui.mobile-ui-open #fight-aux-ui {
+    opacity: 1;
+    visibility: visible;
+    transform: none;
+    pointer-events: auto;
+  }
+
+  #fight-aux-ui #info,
+  #fight-aux-ui #p1-panel,
+  #fight-aux-ui #p2-panel,
+  #fight-aux-ui #training-dash {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+    bottom: auto;
+    transform: none;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+  }
+
+  #fight-aux-ui #info {
+    padding: 8px 10px;
+  }
+
+  #fight-aux-ui #p1-panel,
+  #fight-aux-ui #p2-panel {
+    width: 100%;
+  }
+
+  #fight-aux-ui #training-dash {
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+  }
+
+  #fight-aux-ui #train-controls,
+  #fight-aux-ui #train-controls2,
+  #fight-aux-ui #train-controls3,
+  #fight-aux-ui #train-controls4 {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  #fight-aux-ui .tc-label {
+    width: 100%;
+  }
+
+  #fight-aux-ui .tc-speed {
+    margin-left: 0;
+    width: 100%;
+    text-align: right;
+  }
+
+  #fight-aux-ui #train-actions {
+    flex-direction: column;
+  }
+
+  #fight-aux-ui #train-graph {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  #fight-aux-ui .panel-title {
+    line-height: 1.6;
+  }
+
+  body[data-mode="train"] #fight-aux-ui #info p,
+  body[data-mode="train"] #fight-aux-ui #train-stats,
+  body[data-mode="train"] #fight-aux-ui #train-graph,
+  body[data-mode="train"] #fight-aux-ui #train-status,
+  body[data-mode="train"] #fight-aux-ui #p1-panel,
+  body[data-mode="train"] #fight-aux-ui #p2-panel {
+    display: none;
+  }
+}
+
+@media (max-height: 540px) {
+  #arena-toggle,
+  #game-back,
+  #mobile-ui-toggle {
+    top: 8px;
+    font-size: 6px;
+    padding: 5px 8px;
+  }
+
+  #game-back {
+    left: 72px;
+  }
+
+  #info {
+    top: 40px;
+    padding: 6px 8px;
+  }
+
+  #info h2 {
+    font-size: 8px;
+  }
+
+  #info p {
+    font-size: 5px;
+  }
+
+  #hud {
+    top: 84px;
+    width: min(94vw, 500px);
+    gap: 4px;
+  }
+
+  .health-container {
+    height: 14px;
+  }
+
+  .health-text,
+  .player-label {
+    font-size: 6px;
+  }
+
+  .vs-hud {
+    font-size: 8px;
+  }
+
+  #proximity {
+    top: 106px;
+    font-size: 7px;
+  }
+
+  #dodge-toast {
+    top: 120px;
+    font-size: 7px;
+  }
+
+  .combo {
+    top: 136px;
+    font-size: 9px;
+  }
+
+  .anim-toast {
+    top: 150px;
+    font-size: 7px;
+  }
+
+  #splash-screen,
+  #mode-select,
+  #difficulty-select,
+  #class-select {
+    padding: 14px 12px;
+    gap: 16px;
+  }
+
+  .splash-content {
+    gap: 12px;
+    padding: 14px 12px 18px;
+  }
+
+  .splash-title,
+  #mode-select h1,
+  #difficulty-select h1,
+  #class-select h1 {
+    font-size: clamp(13px, 4vh, 17px);
+    line-height: 1.35;
+  }
+
+  .splash-sub,
+  #mode-select .subtitle,
+  #difficulty-select .subtitle,
+  #class-select .subtitle {
+    font-size: 6px;
+  }
+
+  .mode-buttons,
+  .class-columns {
+    gap: 10px;
+  }
+
+  .mode-btn,
+  .diff-btn {
+    padding: 12px 16px;
+  }
+
+  #splash-start,
+  #fight-btn {
+    padding: 10px 20px;
+  }
+
+  #ko-text {
+    font-size: clamp(22px, 9vh, 34px);
+    letter-spacing: 3px;
   }
 }
