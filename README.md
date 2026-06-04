@@ -11,7 +11,7 @@
 Two AI agents learn to fight from scratch using tabular Q-learning in a real-time 3D environment.  
 No neural networks. No GPU. No ML frameworks. Just a browser.
 
-[**Try it live →**](https://ar9av.in/app/humanarena)
+![alt text](image-1.png)
 
 </div>
 
