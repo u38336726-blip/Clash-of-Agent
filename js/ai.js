@@ -16,18 +16,34 @@ const EXTRA_HEAVY_ATTACK_DELAY = new Set(['Elbow', 'Counter', 'Uppercut', 'Upper
 const BLOCKED_ADVANCE_TIMEOUT = 0.18;
 const STAGNATION_DISTANCE_EPS = 0.035;
 const STAGNATION_TIMEOUT = 0.55;
+const ENGAGEMENT_STALL_DISTANCE_EPS = 0.08;
+const ENGAGEMENT_STALL_TIMEOUT = 1.1;
 const PUNCH_PREFERENCE_RANGE = 1.72;
 const CLOSE_PRESSURE_RANGE = 1.92;
 const CLOSE_PRESSURE_TIMEOUT = 0.42;
+const PENDING_ATTACK_LOOP_RANGE = 2.18;
+const PENDING_ATTACK_TIMEOUT = 0.6;
+const PASSIVE_DECISION_STREAK_LIMIT = 3;
+const PASSIVE_DECISIONS = new Set(['block', 'retreat']);
 
 function getIdealAttackDistance(animName) {
   return ATTACKS[animName]?.idealDist ?? DEFAULT_FIGHT_DISTANCE;
 }
 
+function isWithinCommitDistance(animName, distance) {
+  const atk = ATTACKS[animName];
+  if (!atk) return distance <= DEFAULT_FIGHT_DISTANCE + DISTANCE_TOLERANCE;
+  return distance <= atk.range || distance <= getIdealAttackDistance(animName) + DISTANCE_TOLERANCE;
+}
+
 function canUseAttackAtDistance(animName, distance) {
   const atk = ATTACKS[animName];
   if (!atk) return false;
-  return distance <= atk.idealDist + DISTANCE_TOLERANCE || distance <= atk.range;
+  return isWithinCommitDistance(animName, distance);
+}
+
+function isPassiveDecision(action) {
+  return PASSIVE_DECISIONS.has(action);
 }
 
 function getAttackCooldown(animName, paceMultiplier = 1) {
@@ -62,12 +78,15 @@ export class AIController {
     this.blockedAdvanceTime = 0;
     this.stagnationTime = 0;
     this.closePressureTime = 0;
+    this.engagementStallTime = 0;
 
     this.wantsBlock = false;
     this.blockTimer = 0;
     this.counterPhase = 0;
     this.counterTimer = 0;
     this.pendingAttack = null; // attack queued, waiting to reach ideal distance
+    this.pendingAttackTime = 0;
+    this.lastPendingAttackAnim = null;
 
     this.brain = useBrain ? new Brain(player.id) : null;
 
@@ -83,6 +102,11 @@ export class AIController {
     this.lastOppAttackAnim = null;
     this.lastOppAttackElapsed = 0;
     this.reactedToOppAttack = false;
+    this.lastEngagementDistance = null;
+    this.lastEngagementSelfHealth = player.maxHealth;
+    this.lastEngagementOppHealth = opponent.maxHealth || 100;
+    this.lastDecisionAction = null;
+    this.sameDecisionStreak = 0;
 
     this.onAction = null;
   }
@@ -159,9 +183,11 @@ export class AIController {
     }
 
     this._trackStagnation(distance, dt);
+    this._trackPendingAttack(distance, dt);
 
     this._trackOpponentAttack(opp);
     this._trackClosePressure(distance, dt);
+    this._trackEngagementStall(distance, dt);
 
     // --- Reactive block: check once per opponent attack, not every frame of the attack ---
     if (!p.isStunned && !p.isBlocking && !this.wantsBlock && distance < 2.2 &&
@@ -174,25 +200,38 @@ export class AIController {
       this.reactedToOppAttack = true;
     }
 
+    if (this.pendingAttackTime >= PENDING_ATTACK_TIMEOUT &&
+        this.attackCooldown <= 0 && !p.isStunned && !this.wantsBlock && !ATTACKS[p.currentAnimName]) {
+      this._breakPendingAttackLoop(distance);
+    }
+
     // Per-frame movement: walk to the ideal distance for the queued/next attack.
     // Each animation has a specific reach — fighter positions correctly before swinging.
     if (!p.isStunned && !this.wantsBlock && !p.gameOver && !ATTACKS[p.currentAnimName]) {
-      const idealDist = this.pendingAttack
-        ? getIdealAttackDistance(this.pendingAttack.anim)
-        : DEFAULT_FIGHT_DISTANCE;
-      const err = distance - idealDist;
-
-      if (err > DISTANCE_TOLERANCE) {
-        // Too far — close the gap
-        this.moveForward = 1;
-        this.isSprinting = distance > 3.2;
-      } else {
-        // Once close enough, stop walking and let the queued strike go.
+      const pendingAnim = this.pendingAttack?.anim ?? null;
+      if (pendingAnim && this.attackCooldown <= 0 && isWithinCommitDistance(pendingAnim, distance)) {
         this.moveForward = 0;
         this.isSprinting = false;
-        if (this.pendingAttack && this.attackCooldown <= 0) {
-          this._playAttack(this.pendingAttack.anim);
-          this.pendingAttack = null;
+        this._playAttack(pendingAnim);
+        this.pendingAttack = null;
+      } else {
+        const idealDist = pendingAnim
+          ? getIdealAttackDistance(pendingAnim)
+          : DEFAULT_FIGHT_DISTANCE;
+        const err = distance - idealDist;
+
+        if (err > DISTANCE_TOLERANCE) {
+          // Too far — close the gap
+          this.moveForward = 1;
+          this.isSprinting = distance > 3.2;
+        } else {
+          // Once close enough, stop walking and let the queued strike go.
+          this.moveForward = 0;
+          this.isSprinting = false;
+          if (this.pendingAttack && this.attackCooldown <= 0) {
+            this._playAttack(this.pendingAttack.anim);
+            this.pendingAttack = null;
+          }
         }
       }
     }
@@ -211,6 +250,11 @@ export class AIController {
     }
 
     if (this.closePressureTime >= CLOSE_PRESSURE_TIMEOUT &&
+        this.attackCooldown <= 0 && !p.isStunned && !ATTACKS[p.currentAnimName]) {
+      this._forceInitiative(distance);
+    }
+
+    if (this.engagementStallTime >= ENGAGEMENT_STALL_TIMEOUT &&
         this.attackCooldown <= 0 && !p.isStunned && !ATTACKS[p.currentAnimName]) {
       this._forceInitiative(distance);
     }
@@ -235,8 +279,16 @@ export class AIController {
     const action = BRAIN_ACTIONS[actionIdx];
     const oppThreatening = Boolean(ATTACKS[this.opponent.currentAnimName]);
 
+    this._recordDecision(action);
+
     if (distance <= CLOSE_PRESSURE_RANGE && !oppThreatening &&
         (action === 'block' || action === 'retreat')) {
+      this._forceInitiative(distance);
+      return;
+    }
+
+    if (distance <= 2.3 && !oppThreatening &&
+        isPassiveDecision(action) && this.sameDecisionStreak >= PASSIVE_DECISION_STREAK_LIMIT) {
       this._forceInitiative(distance);
       return;
     }
@@ -319,9 +371,7 @@ export class AIController {
 
     const atk = this._pickAttack(distance, this.combatActions);
     if (!atk) return;
-    const ideal = getIdealAttackDistance(atk.anim);
-
-    if (distance <= ideal + DISTANCE_TOLERANCE) {
+    if (isWithinCommitDistance(atk.anim, distance)) {
       // Close enough already — don't force a fake step back before striking.
       this._playAttack(atk.anim);
     } else {
@@ -358,16 +408,15 @@ export class AIController {
 
       if (!moved && this.moveForward > 0) {
         this.blockedAdvanceTime += dt;
-        const queuedAtk = this.pendingAttack ? ATTACKS[this.pendingAttack.anim] : null;
-        const canCommitQueued = this.pendingAttack && queuedAtk &&
-          this.player.model.position.distanceTo(this.opponent.model.position) <= queuedAtk.range;
+        const distanceNow = this.player.model.position.distanceTo(this.opponent.model.position);
+        const canCommitQueued = this.pendingAttack &&
+          isWithinCommitDistance(this.pendingAttack.anim, distanceNow);
 
         if (canCommitQueued && this.attackCooldown <= 0) {
           this._playAttack(this.pendingAttack.anim);
           this.pendingAttack = null;
           this.blockedAdvanceTime = 0;
         } else if (this.attackCooldown <= 0) {
-          const distanceNow = this.player.model.position.distanceTo(this.opponent.model.position);
           const fallbackAttack = this._getReachableAttack(distanceNow);
           if (fallbackAttack && this.blockedAdvanceTime >= BLOCKED_ADVANCE_TIMEOUT) {
             this.pendingAttack = null;
@@ -452,12 +501,16 @@ export class AIController {
     this.player.play(animName, 0.05);
     this._logAction(animName);
     this.attackCooldown = getAttackCooldown(animName, this.attackPaceMultiplier);
+    this.pendingAttack = null;
+    this.pendingAttackTime = 0;
+    this.lastPendingAttackAnim = null;
     this.lastAttackAnim = animName;
     if (this.lastAttackType === attackType) this.sameTypeStreak += 1;
     else this.sameTypeStreak = 1;
     this.lastAttackType = attackType;
     this.stagnationTime = 0;
     this.closePressureTime = 0;
+    this.engagementStallTime = 0;
   }
 
   _getReachableAttack(distance, preferredAnim = null) {
@@ -554,6 +607,45 @@ export class AIController {
     else this.closePressureTime = 0;
   }
 
+  _trackPendingAttack(distance, dt) {
+    const pendingAnim = this.pendingAttack?.anim ?? null;
+    if (pendingAnim !== this.lastPendingAttackAnim) {
+      this.pendingAttackTime = 0;
+      this.lastPendingAttackAnim = pendingAnim;
+    }
+
+    const canTrack = pendingAnim &&
+      distance <= PENDING_ATTACK_LOOP_RANGE &&
+      !this.player.isStunned &&
+      !this.player.gameOver &&
+      !this.wantsBlock &&
+      !ATTACKS[this.player.currentAnimName];
+
+    if (canTrack) this.pendingAttackTime += dt;
+    else this.pendingAttackTime = 0;
+  }
+
+  _trackEngagementStall(distance, dt) {
+    const p = this.player;
+    const opp = this.opponent;
+    const distanceStable = this.lastEngagementDistance !== null &&
+      Math.abs(distance - this.lastEngagementDistance) <= ENGAGEMENT_STALL_DISTANCE_EPS;
+    const healthStable = p.health === this.lastEngagementSelfHealth &&
+      opp.health === this.lastEngagementOppHealth;
+    const canStall = distance <= 2.3 &&
+      !p.isStunned &&
+      !opp.isStunned &&
+      !p.gameOver &&
+      !opp.gameOver;
+
+    if (canStall && distanceStable && healthStable) this.engagementStallTime += dt;
+    else this.engagementStallTime = 0;
+
+    this.lastEngagementDistance = distance;
+    this.lastEngagementSelfHealth = p.health;
+    this.lastEngagementOppHealth = opp.health;
+  }
+
   _trackOpponentAttack(opponent) {
     const oppAtk = ATTACKS[opponent.currentAnimName];
     if (!oppAtk) {
@@ -594,6 +686,32 @@ export class AIController {
     this.isSprinting = false;
   }
 
+  _breakPendingAttackLoop(distance) {
+    const preferredAnim = this.pendingAttack?.anim ?? null;
+    const fallbackAttack = preferredAnim
+      ? this._getReachableAttack(distance, preferredAnim)
+      : this._getReachableAttack(distance);
+
+    this.pendingAttack = null;
+    this.pendingAttackTime = 0;
+    this.lastPendingAttackAnim = null;
+    this.currentMoveAnim = null;
+    this.blockedAdvanceTime = 0;
+    this.stagnationTime = 0;
+    this.closePressureTime = 0;
+    this.engagementStallTime = 0;
+    this.player.clearMovement();
+
+    if (fallbackAttack) {
+      this.moveForward = 0;
+      this.isSprinting = false;
+      this._playAttack(fallbackAttack.anim);
+      return;
+    }
+
+    this._forceInitiative(distance);
+  }
+
   _forceInitiative(distance) {
     const p = this.player;
     const fallbackAttack = this._getReachableAttack(distance) || this._pickAttack(distance, this.combatActions);
@@ -601,10 +719,13 @@ export class AIController {
     this.wantsBlock = false;
     this.blockTimer = 0;
     this.pendingAttack = null;
+    this.pendingAttackTime = 0;
+    this.lastPendingAttackAnim = null;
     this.currentMoveAnim = null;
     this.blockedAdvanceTime = 0;
     this.stagnationTime = 0;
     this.closePressureTime = 0;
+    this.engagementStallTime = 0;
     p.clearMovement();
 
     if (p.isBlocking) {
@@ -617,9 +738,7 @@ export class AIController {
       return;
     }
 
-    const fallbackAtk = ATTACKS[fallbackAttack.anim];
-    const idealDist = getIdealAttackDistance(fallbackAttack.anim);
-    if (fallbackAtk && (distance <= idealDist + DISTANCE_TOLERANCE || distance <= fallbackAtk.range)) {
+    if (isWithinCommitDistance(fallbackAttack.anim, distance)) {
       this.moveForward = 0;
       this.isSprinting = false;
       this._playAttack(fallbackAttack.anim);
@@ -631,6 +750,12 @@ export class AIController {
     this.isSprinting = false;
   }
 
+  _recordDecision(action) {
+    if (this.lastDecisionAction === action) this.sameDecisionStreak += 1;
+    else this.sameDecisionStreak = 1;
+    this.lastDecisionAction = action;
+  }
+
   reset() {
     this.decisionTimer = 0;
     this.attackCooldown = 0;
@@ -639,12 +764,15 @@ export class AIController {
     this.blockedAdvanceTime = 0;
     this.stagnationTime = 0;
     this.closePressureTime = 0;
+    this.engagementStallTime = 0;
     this.wantsBlock = false;
     this.blockTimer = 0;
     this.counterPhase = 0;
     this.counterTimer = 0;
     this.tickRewardTimer = 0;
     this.pendingAttack = null;
+    this.pendingAttackTime = 0;
+    this.lastPendingAttackAnim = null;
     this.lastHealth = this.player.maxHealth;
     this.lastOppHealth = this.opponent?.maxHealth || 100;
     this.lastProgressDistance = null;
@@ -656,5 +784,10 @@ export class AIController {
     this.lastOppAttackAnim = null;
     this.lastOppAttackElapsed = 0;
     this.reactedToOppAttack = false;
+    this.lastEngagementDistance = null;
+    this.lastEngagementSelfHealth = this.player.maxHealth;
+    this.lastEngagementOppHealth = this.opponent?.maxHealth || 100;
+    this.lastDecisionAction = null;
+    this.sameDecisionStreak = 0;
   }
 }

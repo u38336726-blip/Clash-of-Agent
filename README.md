@@ -4,14 +4,14 @@
 
 **Browser-based 3D fighting game with real-time reinforcement learning**
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-Play%20Now-brightgreen?style=for-the-badge)](https://ar9av.in/app/humanarena)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-Play%20Now-brightgreen?style=for-the-badge)](https://q-learning-clash-of-agent-zkksa.ondigitalocean.app/)
 [![Paper](https://img.shields.io/badge/Research-Paper-blue?style=for-the-badge)](paper/human_movement_arena.pdf)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 Two AI agents learn to fight from scratch using tabular Q-learning in a real-time 3D environment.  
 No neural networks. No GPU. No ML frameworks. Just a browser.
 
-![alt text](image-1.png)
+[**Try it live →**](https://q-learning-clash-of-agent-zkksa.ondigitalocean.app/)
 
 </div>
 
@@ -399,6 +399,6 @@ MIT
 ---
 
 <div align="center">
-  <strong><a href="https://ar9av.in/app/humanarena">Play Human Movement Arena</a></strong><br/>
+  <strong><a href="https://q-learning-clash-of-agent-zkksa.ondigitalocean.app/">Play Human Movement Arena</a></strong><br/>
   Built by <a href="https://github.com/Ar9av">Arnav Gupta</a>
 </div>
