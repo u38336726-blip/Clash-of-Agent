@@ -24,7 +24,7 @@ Human Movement Arena is a 3D fighting game where AI agents discover real combat 
 The project is also a research experiment investigating how **training fidelity** shapes learned behavior. Core finding: **185 rounds of real 3D training produced better fighters than 5,050 rounds of simplified headless simulation.**
 
 <div align="center">
-  <img src="paper/figures/fig_action_shot.png" width="700" alt="Two AI fighters in close combat" />
+  <img src="image.png" width="700" alt="Two AI fighters in close combat" />
   <br />
   <em>AI agents in close combat, with live training dashboard visible</em>
 </div>
